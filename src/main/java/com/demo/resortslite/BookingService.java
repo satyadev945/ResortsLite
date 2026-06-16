@@ -126,11 +126,18 @@ public class BookingService {
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
+        return createBooking(guestName, roomType, checkIn, checkOut, null);
+    }
+
+    public Map<String, Object> createBooking(String guestName, String roomType,
+                                              String checkIn, String checkOut, String createdBy) {
         String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
         // Fixed: Use parameterized query to prevent SQL injection
-        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)";
-        jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut);
+        // Include metadata fields: created_by, created_at, access_level
+        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout, created_by, created_at, access_level) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)";
+        String accessLevel = (createdBy != null && !createdBy.isEmpty()) ? "ADMIN" : "USER";
+        jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut, createdBy, accessLevel);
 
         // Fixed: Use SHA-256 instead of MD5 for secure hashing
         String confirmCode = sha256Hash(bookingId + guestName);
@@ -143,6 +150,8 @@ public class BookingService {
         booking.put("checkOut", checkOut);
         booking.put("confirmationCode", confirmCode);
         booking.put("dbHost", dbHost);
+        booking.put("createdBy", createdBy);
+        booking.put("accessLevel", accessLevel);
         return booking;
     }
 
@@ -198,6 +207,37 @@ public class BookingService {
         }
         String storedPassword = authCredentials.get(username);
         return storedPassword != null && storedPassword.equals(password);
+    }
+
+    /**
+     * Authenticates user and returns user role information.
+     * Returns Map with "authenticated" (boolean) and "role" (String) keys.
+     */
+    public Map<String, Object> authenticateUserWithRole(String username, String password) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("authenticated", false);
+        result.put("role", null);
+        result.put("username", username);
+
+        if (authCredentials == null || authCredentials.isEmpty()) {
+            return result;
+        }
+
+        // Check if password matches
+        String storedPassword = authCredentials.get(username);
+        if (storedPassword == null || !storedPassword.equals(password)) {
+            return result;
+        }
+
+        // Extract role from credentials (format: username -> password or username:role -> password)
+        String role = authCredentials.get(username + ":role");
+        if (role == null) {
+            role = "USER"; // Default role
+        }
+
+        result.put("authenticated", true);
+        result.put("role", role);
+        return result;
     }
 
     /**
