@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="ResortsLite" default="package" basedir="." xmlns:ivy="antlib:org.apache.ivy.ant">
+
+    <!-- Project Properties -->
+    <property name="app.name" value="resortsLite"/>
+    <property name="app.version" value="1.0.0"/>
+    <property name="java.source.version" value="1.8"/>
+    <property name="java.target.version" value="1.8"/>
+
+    <!-- Directory Properties -->
+    <property name="src.dir" location="src/main/java"/>
+    <property name="resources.dir" location="src/main/resources"/>
+    <property name="test.src.dir" location="src/test/java"/>
+    <property name="test.resources.dir" location="src/test/resources"/>
+    <property name="build.dir" location="build"/>
+    <property name="build.classes.dir" location="${build.dir}/classes"/>
+    <property name="build.test.classes.dir" location="${build.dir}/test-classes"/>
+    <property name="dist.dir" location="dist"/>
+    <property name="lib.dir" location="lib"/>
+    <property name="frontend.dir" location="frontend"/>
+    <property name="frontend.build.dir" location="${frontend.dir}/build"/>
+
+    <!-- Load Ivy -->
+    <taskdef resource="org/apache/ivy/ant/antlib.xml" uri="antlib:org.apache.ivy.ant"/>
+
+    <!-- Clean Target -->
+    <target name="clean" description="Remove all generated files">
+        <delete dir="${build.dir}"/>
+        <delete dir="${dist.dir}"/>
+        <delete dir="${lib.dir}"/>
+        <delete dir="${frontend.build.dir}"/>
+    </target>
+
+    <!-- Resolve Dependencies -->
+    <target name="resolve" description="Retrieve dependencies with Ivy">
+        <ivy:retrieve pattern="${lib.dir}/[conf]/[artifact]-[revision](-[classifier]).[ext]"/>
+        <ivy:cachepath pathid="compile.classpath" conf="compile"/>
+        <ivy:cachepath pathid="runtime.classpath" conf="runtime"/>
+        <ivy:cachepath pathid="test.classpath" conf="test"/>
+    </target>
+
+    <!-- Compile Main Sources -->
+    <target name="compile" depends="resolve" description="Compile main Java sources">
+        <mkdir dir="${build.classes.dir}"/>
+        <javac srcdir="${src.dir}"
+               destdir="${build.classes.dir}"
+               source="${java.source.version}"
+               target="${java.target.version}"
+               includeantruntime="false"
+               debug="true"
+               encoding="UTF-8">
+            <classpath refid="compile.classpath"/>
+        </javac>
+        <!-- Copy resources -->
+        <copy todir="${build.classes.dir}">
+            <fileset dir="${resources.dir}"/>
+        </copy>
+    </target>
+
+    <!-- Compile Test Sources -->
+    <target name="test-compile" depends="compile" description="Compile test Java sources">
+        <mkdir dir="${build.test.classes.dir}"/>
+        <javac srcdir="${test.src.dir}"
+               destdir="${build.test.classes.dir}"
+               source="${java.source.version}"
+               target="${java.target.version}"
+               includeantruntime="false"
+               debug="true"
+               encoding="UTF-8">
+            <classpath>
+                <path refid="test.classpath"/>
+                <pathelement location="${build.classes.dir}"/>
+            </classpath>
+        </javac>
+        <!-- Copy test resources -->
+        <copy todir="${build.test.classes.dir}" failonerror="false">
+            <fileset dir="${test.resources.dir}" erroronmissingdir="false"/>
+        </copy>
+    </target>
+
+    <!-- Run Tests -->
+    <target name="test" depends="test-compile" description="Run unit tests">
+        <mkdir dir="${build.dir}/test-results"/>
+        <junit printsummary="yes" haltonfailure="false" fork="true" forkmode="once">
+            <classpath>
+                <pathelement location="${build.classes.dir}"/>
+                <pathelement location="${build.test.classes.dir}"/>
+                <path refid="test.classpath"/>
+            </classpath>
+            <formatter type="plain"/>
+            <formatter type="xml"/>
+            <batchtest todir="${build.dir}/test-results">
+                <fileset dir="${test.src.dir}">
+                    <include name="**/*Test.java"/>
+                    <include name="**/Test*.java"/>
+                </fileset>
+            </batchtest>
+        </junit>
+    </target>
+
+    <!-- Build Frontend -->
+    <target name="build-frontend" description="Build React frontend">
+        <exec executable="npm" dir="${frontend.dir}" failonerror="true">
+            <arg value="install"/>
+        </exec>
+        <exec executable="npm" dir="${frontend.dir}" failonerror="true">
+            <arg value="run"/>
+            <arg value="build"/>
+        </exec>
+    </target>
+
+    <!-- Copy Frontend Resources -->
+    <target name="copy-frontend-resources" depends="build-frontend" description="Copy frontend build to JAR resources">
+        <mkdir dir="${build.classes.dir}/static"/>
+        <copy todir="${build.classes.dir}/static">
+            <fileset dir="${frontend.build.dir}"/>
+        </copy>
+    </target>
+
+    <!-- Package as Executable JAR -->
+    <target name="package" depends="compile,test,copy-frontend-resources" description="Create executable Spring Boot JAR">
+        <mkdir dir="${dist.dir}"/>
+
+        <!-- Create fat JAR with Spring Boot structure -->
+        <jar destfile="${dist.dir}/${app.name}-${app.version}.jar" compress="true">
+            <!-- Manifest for Spring Boot -->
+            <manifest>
+                <attribute name="Main-Class" value="org.springframework.boot.loader.JarLauncher"/>
+                <attribute name="Start-Class" value="com.demo.resortslite.ResortsLiteApplication"/>
+                <attribute name="Spring-Boot-Version" value="2.7.18"/>
+                <attribute name="Spring-Boot-Classes" value="BOOT-INF/classes/"/>
+                <attribute name="Spring-Boot-Lib" value="BOOT-INF/lib/"/>
+            </manifest>
+
+            <!-- Add application classes to BOOT-INF/classes -->
+            <zipfileset dir="${build.classes.dir}" prefix="BOOT-INF/classes"/>
+
+            <!-- Add dependencies to BOOT-INF/lib -->
+            <zipfileset dir="${lib.dir}/runtime" prefix="BOOT-INF/lib" includes="*.jar"/>
+            <zipfileset dir="${lib.dir}/compile" prefix="BOOT-INF/lib" includes="*.jar"/>
+
+            <!-- Add Spring Boot loader classes to root -->
+            <zipfileset src="${lib.dir}/compile/spring-boot-loader-2.7.18.jar">
+                <include name="org/springframework/boot/loader/**"/>
+            </zipfileset>
+        </jar>
+
+        <echo message="Executable JAR created: ${dist.dir}/${app.name}-${app.version}.jar"/>
+    </target>
+
+    <!-- Run Application -->
+    <target name="run" depends="package" description="Run the Spring Boot application">
+        <java jar="${dist.dir}/${app.name}-${app.version}.jar" fork="true"/>
+    </target>
+
+</project>

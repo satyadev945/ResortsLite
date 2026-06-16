@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ivy-module version="2.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:noNamespaceSchemaLocation="http://ant.apache.org/ivy/schemas/ivy.xsd">
+
+    <info organisation="com.demo" module="resortsLite" revision="1.0.0"/>
+
+    <configurations>
+        <conf name="compile" description="Compile dependencies"/>
+        <conf name="runtime" extends="compile" description="Runtime dependencies"/>
+        <conf name="test" extends="runtime" description="Test dependencies"/>
+    </configurations>
+
+    <dependencies>
+        <!-- Spring Boot Starters -->
+        <dependency org="org.springframework.boot" name="spring-boot-starter-web" rev="2.7.18" conf="compile->default"/>
+        <dependency org="org.springframework.boot" name="spring-boot-starter-jdbc" rev="2.7.18" conf="compile->default"/>
+        <dependency org="org.springframework.boot" name="spring-boot-starter-security" rev="2.7.18" conf="compile->default"/>
+        <dependency org="org.springframework.boot" name="spring-boot-starter-data-redis" rev="2.7.18" conf="compile->default"/>
+        <dependency org="org.springframework.boot" name="spring-boot-loader" rev="2.7.18" conf="compile->default"/>
+
+        <!-- Spring Session -->
+        <dependency org="org.springframework.session" name="spring-session-data-redis" rev="2.7.5" conf="compile->default"/>
+
+        <!-- AWS SDK v2 -->
+        <dependency org="software.amazon.awssdk" name="s3" rev="2.17.295" conf="compile->default"/>
+        <dependency org="software.amazon.awssdk" name="secretsmanager" rev="2.17.295" conf="compile->default"/>
+        <dependency org="software.amazon.awssdk" name="ssm" rev="2.17.295" conf="compile->default"/>
+
+        <!-- Redis Client -->
+        <dependency org="io.lettuce" name="lettuce-core" rev="6.1.10.RELEASE" conf="compile->default"/>
+
+        <!-- Connection Pool -->
+        <dependency org="com.zaxxer" name="HikariCP" rev="4.0.3" conf="compile->default"/>
+
+        <!-- JWT -->
+        <dependency org="io.jsonwebtoken" name="jjwt-api" rev="0.11.5" conf="compile->default"/>
+        <dependency org="io.jsonwebtoken" name="jjwt-impl" rev="0.11.5" conf="runtime->default"/>
+        <dependency org="io.jsonwebtoken" name="jjwt-jackson" rev="0.11.5" conf="runtime->default"/>
+
+        <!-- Jackson -->
+        <dependency org="com.fasterxml.jackson.core" name="jackson-databind" rev="2.13.5" conf="compile->default"/>
+
+        <!-- H2 Database -->
+        <dependency org="com.h2database" name="h2" rev="2.1.214" conf="runtime->default"/>
+
+        <!-- Test Dependencies -->
+        <dependency org="org.springframework.boot" name="spring-boot-starter-test" rev="2.7.18" conf="test->default"/>
+        <dependency org="org.springframework.security" name="spring-security-test" rev="5.7.11" conf="test->default"/>
+        <dependency org="junit" name="junit" rev="4.13.2" conf="test->default"/>
+    </dependencies>
+
+</ivy-module>

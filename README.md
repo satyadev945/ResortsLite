@@ -14,7 +14,7 @@ patterns** across all four COMPASS assessment domains.
 | Java | 1.8 |
 | Spring Boot | 2.7.18 |
 | Spring MVC | 5.3.x |
-| Build | Maven |
+| Build | Apache Ant + Ivy |
 | Database | H2 in-memory |
 
 ---
@@ -55,10 +55,29 @@ patterns** across all four COMPASS assessment domains.
 
 ---
 
+## Prerequisites
+
+- **Apache Ant** 1.10.x or higher
+- **Apache Ivy** 2.5.x or higher
+- **Java** 8 (JDK 1.8)
+- **Node.js** and **npm** (for frontend build)
+
+## Ant Build Commands
+
+| Command | Description |
+|---|---|
+| `ant clean` | Remove all build artifacts |
+| `ant resolve` | Download dependencies via Ivy |
+| `ant compile` | Compile Java sources |
+| `ant test` | Run unit tests |
+| `ant build-frontend` | Build React frontend application |
+| `ant package` | Create executable JAR (includes frontend) |
+| `ant run` | Start the Spring Boot application |
+
 ## How to Run
 
 ```bash
-mvn spring-boot:run
+ant run
 ```
 
 App starts on http://localhost:8080
@@ -71,6 +90,13 @@ POST /api/bookings/create?guestName=John&roomType=SUITE&checkIn=2024-06-01&check
 GET  /api/bookings/status/{bookingId}
 GET  /api/bookings/availability?roomType=DELUXE
 GET  /api/bookings/report/download?month=june
+```
+
+**Admin Dashboard:**
+```
+POST /api/auth/login (username: admin, password: demo123)
+GET  /api/admin/bookings
+GET  /api/admin/bookings/{id}
 ```
 
 ---
