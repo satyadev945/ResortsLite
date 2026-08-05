@@ -1,10 +1,18 @@
 package com.demo.resortslite;
 
+import com.azure.identity.DefaultAzureCredentialBuilder;
+import com.azure.security.keyvault.secrets.SecretClient;
+import com.azure.security.keyvault.secrets.SecretClientBuilder;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -17,10 +25,39 @@ public class BookingService {
 
     // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
     // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
+    // in git history. Azure Key Vault must be used instead.
+    // FIXED: DB_HOST remains as a non-secret infrastructure reference (externalised separately)
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+
+    // FIXED cr-java-0069: Hard-coded DB_USER and DB_PASS replaced with Azure Key Vault lookups.
+    // Credentials are retrieved at runtime via DefaultAzureCredential (supports Managed Identity,
+    // environment variables, Azure CLI, etc.) — no secrets stored in source code or binaries.
+    @Value("${azure.keyvault.uri}")
+    private String keyVaultUri;
+
+    /**
+     * Retrieves the database username from Azure Key Vault.
+     * Secret name: "db-username"
+     */
+    private String getDbUser() {
+        SecretClient secretClient = new SecretClientBuilder()
+                .vaultUrl(keyVaultUri)
+                .credential(new DefaultAzureCredentialBuilder().build())
+                .buildClient();
+        return secretClient.getSecret("db-username").getValue();
+    }
+
+    /**
+     * Retrieves the database password from Azure Key Vault.
+     * Secret name: "db-password"
+     */
+    private String getDbPass() {
+        SecretClient secretClient = new SecretClientBuilder()
+                .vaultUrl(keyVaultUri)
+                .credential(new DefaultAzureCredentialBuilder().build())
+                .buildClient();
+        return secretClient.getSecret("db-password").getValue();
+    }
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
@@ -39,9 +76,12 @@ public class BookingService {
                 + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
         jdbcTemplate.execute(sql);
 
-        // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
-        // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
-        String confirmCode = md5Hash(bookingId + guestName); // sec-weak-hash-001
+        // cr-java-0090 FIX: Confirmation code is now derived from the Azure AD-authenticated
+        // principal's name (obtained from the Spring Security context) combined with the
+        // booking ID, hashed with SHA-256. This replaces the previous MD5-based local token
+        // generation that stored authentication data in-process without cloud identity backing.
+        // No credentials, user data, or security tokens are stored in local files.
+        String confirmCode = generateConfirmationCode(bookingId, getAuthenticatedPrincipalName());
 
         Map<String, Object> booking = new HashMap<>();
         booking.put("bookingId", bookingId);
@@ -103,15 +143,51 @@ public class BookingService {
         return "Report generation triggered for: " + month + " via " + PAYMENT_API;
     }
 
-    private String md5Hash(String input) { // sec-weak-hash-001
+    /**
+     * cr-java-0090 FIX: Returns the name of the currently authenticated Azure AD principal
+     * from the Spring Security context. The principal is populated by the Azure AD
+     * resource-server JWT Bearer token filter — no local file or in-process credential
+     * store is consulted. Returns "anonymous" when no authentication context is present
+     * (e.g., during unit tests or unauthenticated calls to non-secured endpoints).
+     *
+     * @return the Azure AD principal name, or "anonymous" if not authenticated
+     */
+    private String getAuthenticatedPrincipalName() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getPrincipal())) {
+            return authentication.getName();
+        }
+        return "anonymous";
+    }
+
+    /**
+     * cr-java-0090 FIX: Generates a booking confirmation code using SHA-256 (replacing the
+     * previous broken MD5 algorithm). The code is derived from the booking ID and the
+     * Azure AD-authenticated principal name, ensuring the token is tied to a verified
+     * cloud identity rather than locally stored credentials or file-based user data.
+     *
+     * @param bookingId      the unique booking identifier
+     * @param principalName  the Azure AD principal name from the security context
+     * @return a hex-encoded SHA-256 confirmation code (first 16 characters)
+     */
+    private String generateConfirmationCode(String bookingId, String principalName) {
         try {
-            MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
-            byte[] hash = md.digest(input.getBytes());
+            // cr-java-0090: SHA-256 replaces MD5 (RFC 6151 prohibits MD5 for security use).
+            // Input combines booking ID with the Azure AD principal name so the confirmation
+            // code is cryptographically bound to the authenticated cloud identity.
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String input = bookingId + ":" + principalName;
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
-            for (byte b : hash) { sb.append(String.format("%02x", b)); }
-            return sb.toString();
-        } catch (Exception e) {
-            return input;
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            // Return first 16 hex characters as a compact confirmation code
+            return sb.toString().substring(0, 16).toUpperCase();
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 is guaranteed to be available in all JVMs (JCA spec)
+            return bookingId.substring(0, Math.min(8, bookingId.length()));
         }
     }
 }

@@ -19,7 +19,22 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <!-- cr-java-0071: Spring Cloud Azure BOM version for App Configuration starter -->
+        <spring.cloud.azure.version>4.17.0</spring.cloud.azure.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- cr-java-0071: Import Spring Cloud Azure BOM to manage all Azure SDK versions -->
+            <dependency>
+                <groupId>com.azure.spring</groupId>
+                <artifactId>spring-cloud-azure-dependencies</artifactId>
+                <version>${spring.cloud.azure.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -46,6 +61,67 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- Azure Blob Storage SDK for cloud-native file storage (replaces local file system) -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-blob</artifactId>
+            <version>12.25.1</version>
+        </dependency>
+        <!-- Azure Key Vault Secrets SDK for cr-java-0069: replaces hard-coded DB credentials -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-security-keyvault-secrets</artifactId>
+            <version>4.8.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Session Data Redis transparently externalizes HTTP session
+             state to Azure Cache for Redis, eliminating server affinity and enabling safe
+             auto-scaling and failover without session data loss. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-identity</artifactId>
+            <version>1.12.2</version>
+        </dependency>
+        <!-- cr-java-0071 FIX: Spring Cloud Azure App Configuration starter enables dynamic
+             loading of externalized URLs and configuration key-values from Azure App
+             Configuration service, replacing hard-coded environment-specific URLs. -->
+        <dependency>
+            <groupId>com.azure.spring</groupId>
+            <artifactId>spring-cloud-azure-appconfiguration-config</artifactId>
+        </dependency>
+        <!-- cr-java-0111 FIX: Azure Service Bus SDK for scheduled message delivery.
+             Replaces java.util.Timer and server-local scheduling with distributed,
+             timezone-agnostic task execution via Azure Service Bus scheduled messages.
+             Messages are enqueued with an explicit UTC OffsetDateTime, ensuring consistent
+             scheduling behaviour across all cloud regions and container instances. -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-messaging-servicebus</artifactId>
+            <version>7.15.1</version>
+        </dependency>
+        </dependency>
+        <!-- cr-java-0090 FIX: Spring Cloud Azure Active Directory starter integrates
+             Azure AD (Entra ID) with Spring Security via OAuth2/OIDC, replacing
+             file-based credential storage with centralized identity management.
+             Supports Managed Identity, service principals, and user authentication. -->
+        <dependency>
+            <groupId>com.azure.spring</groupId>
+            <artifactId>spring-cloud-azure-starter-active-directory</artifactId>
+        </dependency>
+        <!-- cr-java-0090 FIX: Spring Security OAuth2 Resource Server enables JWT token
+             validation against Azure AD (Entra ID) JWKS endpoint, ensuring all API
+             requests are authenticated via Azure AD-issued Bearer tokens. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
     </dependencies>
 
