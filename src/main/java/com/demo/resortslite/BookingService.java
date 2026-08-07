@@ -1,9 +1,16 @@
 package com.demo.resortslite;
 
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.azure.data.appconfiguration.ConfigurationClient;
+import com.azure.data.appconfiguration.ConfigurationClientBuilder;
+import com.azure.identity.DefaultAzureCredentialBuilder;
+import com.azure.security.keyvault.secrets.SecretClient;
+import com.azure.security.keyvault.secrets.SecretClientBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
@@ -15,33 +22,35 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
-    private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    private final String keyVaultUrl;
+    private final String dbUserSecretName;
+    private final String dbPassSecretName;
+    private final String appConfigConnectionString;
+    private final String appConfigEndpoint;
+    private final String paymentApiFallback;
 
-    // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
-    // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
-    // or scaling events. Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+    public BookingService(
+            @Value("${app.keyvault.url:}") String keyVaultUrl,
+            @Value("${app.keyvault.db-user-secret:db-user}") String dbUserSecretName,
+            @Value("${app.keyvault.db-pass-secret:db-password}") String dbPassSecretName,
+            @Value("${app.config.connection-string:}") String appConfigConnectionString,
+            @Value("${app.config.endpoint:}") String appConfigEndpoint,
+            @Value("${app.payment.endpoint:https://payment-svc.internal/charge}") String paymentApiFallback) {
+        this.keyVaultUrl = keyVaultUrl;
+        this.dbUserSecretName = dbUserSecretName;
+        this.dbPassSecretName = dbPassSecretName;
+        this.appConfigConnectionString = appConfigConnectionString;
+        this.appConfigEndpoint = appConfigEndpoint;
+        this.paymentApiFallback = paymentApiFallback;
+    }
 
     public Map<String, Object> createBooking(String guestName, String roomType,
-                                              String checkIn, String checkOut) {
+                                             String checkIn, String checkOut) {
         String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)";
+        jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
-        // An attacker can pass guestName = "'; DROP TABLE bookings; --" to destroy data.
-        // Use parameterised queries (JdbcTemplate with '?') to prevent SQL injection.
-        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES ('" // sql-inject-001
-                + bookingId + "', '" + guestName + "', '" + roomType               // sql-inject-001
-                + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
-        jdbcTemplate.execute(sql);
-
-        // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
-        // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
-        String confirmCode = md5Hash(bookingId + guestName); // sec-weak-hash-001
+        String confirmCode = sha256Hash(bookingId + guestName);
 
         Map<String, Object> booking = new HashMap<>();
         booking.put("bookingId", bookingId);
@@ -50,26 +59,22 @@ public class BookingService {
         booking.put("checkIn", checkIn);
         booking.put("checkOut", checkOut);
         booking.put("confirmationCode", confirmCode);
-        booking.put("dbHost", DB_HOST);
+        booking.put("dbUserSecret", getSecretValue(dbUserSecretName));
+        booking.put("dbPasswordSecret", getSecretValue(dbPassSecretName));
         return booking;
     }
 
     public Map<String, Object> getBookingById(String bookingId) {
-        // VIOLATION [Security Health / Critical]: SQL injection via string concatenation.
-        // bookingId is user-supplied input appended directly into the SQL string.
-        String sql = "SELECT * FROM bookings WHERE id = '" + bookingId + "'"; // sql-inject-001
+        String sql = "SELECT * FROM bookings WHERE id = ?";
         Map<String, Object> result = new HashMap<>();
         try {
-            result = jdbcTemplate.queryForMap(sql);
+            result = jdbcTemplate.queryForMap(sql, bookingId);
         } catch (Exception e) {
             result.put("error", "Booking not found: " + bookingId);
         }
         return result;
     }
 
-    // VIOLATION [Code Sustainability / High]: High cyclomatic complexity.
-    // This method has 9+ decision branches. Automated transformation tools flag methods
-    // above complexity threshold as high maintenance risk and transformation blockers.
     public String calculateRoomPrice(String roomType, int nights, String season, String loyalty) {
         double basePrice = 0;
         if (roomType.equals("STANDARD")) { basePrice = 120.0; }
@@ -89,29 +94,61 @@ public class BookingService {
     }
 
     public boolean isRoomAvailable(String roomType) {
-        // VIOLATION [Code Sustainability / Medium]: Duplicated validation logic.
-        // Same room type validation is repeated here and in calculateRoomPrice.
-        // Should be extracted to a shared RoomType enum or validator.
-        if (!roomType.equals("STANDARD") && !roomType.equals("DELUXE") // dup-logic-001
-                && !roomType.equals("SUITE") && !roomType.equals("VILLA")) { // dup-logic-001
+        if (!roomType.equals("STANDARD") && !roomType.equals("DELUXE")
+                && !roomType.equals("SUITE") && !roomType.equals("VILLA")) {
             return false;
         }
         return true;
     }
 
     public String generateReport(String month) {
-        return "Report generation triggered for: " + month + " via " + PAYMENT_API;
+        return "Report generation triggered for: " + month + " via " + resolvePaymentApi();
     }
 
-    private String md5Hash(String input) { // sec-weak-hash-001
+    private String sha256Hash(String input) {
         try {
-            MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
-            byte[] hash = md.digest(input.getBytes());
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
             return sb.toString();
         } catch (Exception e) {
             return input;
         }
+    }
+
+    private String getSecretValue(String secretName) {
+        if (keyVaultUrl == null || keyVaultUrl.trim().isEmpty()) {
+            return secretName;
+        }
+        try {
+            SecretClient secretClient = new SecretClientBuilder()
+                    .vaultUrl(keyVaultUrl)
+                    .credential(new DefaultAzureCredentialBuilder().build())
+                    .buildClient();
+            return secretClient.getSecret(secretName).getValue();
+        } catch (Exception e) {
+            return secretName;
+        }
+    }
+
+    private String resolvePaymentApi() {
+        try {
+            if (appConfigConnectionString != null && !appConfigConnectionString.trim().isEmpty()) {
+                ConfigurationClient client = new ConfigurationClientBuilder()
+                        .connectionString(appConfigConnectionString)
+                        .buildClient();
+                return client.getConfigurationSetting("app.payment.endpoint", null).getValue();
+            }
+            if (appConfigEndpoint != null && !appConfigEndpoint.trim().isEmpty()) {
+                ConfigurationClient client = new ConfigurationClientBuilder()
+                        .endpoint(appConfigEndpoint)
+                        .credential(new DefaultAzureCredentialBuilder().build())
+                        .buildClient();
+                return client.getConfigurationSetting("app.payment.endpoint", null).getValue();
+            }
+        } catch (Exception ignored) {
+        }
+        return paymentApiFallback;
     }
 }

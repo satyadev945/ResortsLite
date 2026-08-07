@@ -1,55 +1,96 @@
 package com.demo.resortslite;
 
+import com.azure.core.credential.TokenCredential;
+import com.azure.data.appconfiguration.ConfigurationClient;
+import com.azure.data.appconfiguration.ConfigurationClientBuilder;
+import com.azure.identity.DefaultAzureCredentialBuilder;
+import com.azure.messaging.servicebus.ServiceBusClientBuilder;
+import com.azure.messaging.servicebus.ServiceBusSenderClient;
+import com.azure.messaging.servicebus.models.ServiceBusMessage;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.BlobContainerClientBuilder;
+import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.BlobServiceClientBuilder;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    private final String storageConnectionString;
+    private final String storageEndpoint;
+    private final String reportsContainerName;
+    private final String backupContainerName;
+    private final String appConfigConnectionString;
+    private final String appConfigEndpoint;
+    private final String configuredServerPort;
+    private final String configuredDownloadBaseUrl;
+    private final String serviceBusConnectionString;
+    private final String serviceBusQueueName;
+    private final long scheduleDelaySeconds;
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
-
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    public ReportService(
+            @Value("${app.report.storage.connection-string:}") String storageConnectionString,
+            @Value("${app.report.storage.endpoint:}") String storageEndpoint,
+            @Value("${app.report.container-name:reports}") String reportsContainerName,
+            @Value("${app.report.backup-container-name:report-backups}") String backupContainerName,
+            @Value("${app.config.connection-string:}") String appConfigConnectionString,
+            @Value("${app.config.endpoint:}") String appConfigEndpoint,
+            @Value("${server.port:8080}") String configuredServerPort,
+            @Value("${app.report.download-base-url:https://reports.resorts-internal.com/download}") String configuredDownloadBaseUrl,
+            @Value("${app.servicebus.connection-string:}") String serviceBusConnectionString,
+            @Value("${app.servicebus.queue-name:report-jobs}") String serviceBusQueueName,
+            @Value("${app.servicebus.schedule-delay-seconds:300}") long scheduleDelaySeconds) {
+        this.storageConnectionString = storageConnectionString;
+        this.storageEndpoint = storageEndpoint;
+        this.reportsContainerName = reportsContainerName;
+        this.backupContainerName = backupContainerName;
+        this.appConfigConnectionString = appConfigConnectionString;
+        this.appConfigEndpoint = appConfigEndpoint;
+        this.configuredServerPort = configuredServerPort;
+        this.configuredDownloadBaseUrl = configuredDownloadBaseUrl;
+        this.serviceBusConnectionString = serviceBusConnectionString;
+        this.serviceBusQueueName = serviceBusQueueName;
+        this.scheduleDelaySeconds = scheduleDelaySeconds;
+    }
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String reportContent = "BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n"
+                + "BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n"
+                + "BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n";
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
-            if (!reportDir.exists()) {
-                reportDir.mkdirs();
-            }
+            BlobContainerClient reportContainer = getContainerClient(reportsContainerName);
+            reportContainer.getBlobClient(fileName).upload(
+                    new ByteArrayInputStream(reportContent.getBytes(StandardCharsets.UTF_8)),
+                    reportContent.getBytes(StandardCharsets.UTF_8).length,
+                    true);
 
-            FileWriter writer = new FileWriter(fullPath);
-            writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
-            writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
-            writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
-            writer.close();
+            BlobContainerClient backupContainer = getContainerClient(backupContainerName);
+            backupContainer.getBlobClient(fileName).upload(
+                    new ByteArrayInputStream(reportContent.getBytes(StandardCharsets.UTF_8)),
+                    reportContent.getBytes(StandardCharsets.UTF_8).length,
+                    true);
 
             result.put("status", "generated");
-            result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT); // czr-port-001
+            result.put("path", reportContainer.getBlobClient(fileName).getBlobUrl());
+            result.put("backupPath", backupContainer.getBlobClient(fileName).getBlobUrl());
+            result.put("serverPort", resolveServerPort());
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             result.put("status", "error");
             result.put("message", e.getMessage());
         }
@@ -57,22 +98,87 @@ public class ReportService {
         return result;
     }
 
-    // VIOLATION [Code Sustainability / Medium]: No JavaDoc or method documentation.
-    // Missing documentation is flagged across all public methods in the codebase.
-    // This increases onboarding time and transformation risk for automated tools.
-    public String buildReportDownloadUrl(String reportName) { // doc-missing-001
-        // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP URL
-        // hardcoded for report download. Cloud security standards enforce HTTPS.
-        return "http://reports.resorts-internal.com:8080/download/" + reportName; // cr-java-0088
+    public String buildReportDownloadUrl(String reportName) {
+        return resolveDownloadBaseUrl() + "/" + reportName;
     }
 
-    public Map<String, Object> getSystemInfo() { // doc-missing-001
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+    public Map<String, Object> getSystemInfo() {
+        String timestamp = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
-        info.put("serverPort", SERVER_PORT);        // czr-port-001
+        info.put("reportContainer", reportsContainerName);
+        info.put("backupContainer", backupContainerName);
+        info.put("serverPort", resolveServerPort());
         info.put("generatedAt", timestamp);
         return info;
+    }
+
+    public void scheduleReportGeneration(String month, String year) {
+        if (serviceBusConnectionString == null || serviceBusConnectionString.trim().isEmpty()) {
+            return;
+        }
+
+        ServiceBusSenderClient senderClient = new ServiceBusClientBuilder()
+                .connectionString(serviceBusConnectionString)
+                .sender()
+                .queueName(serviceBusQueueName)
+                .buildClient();
+
+        try {
+            Instant scheduledTime = Instant.now().plus(Duration.ofSeconds(scheduleDelaySeconds));
+            ServiceBusMessage message = new ServiceBusMessage("generate-report:" + month + ":" + year)
+                    .setScheduledEnqueueTime(scheduledTime);
+            senderClient.scheduleMessage(message, scheduledTime);
+        } finally {
+            senderClient.close();
+        }
+    }
+
+    private BlobContainerClient getContainerClient(String containerName) {
+        BlobServiceClient serviceClient;
+        if (storageConnectionString != null && !storageConnectionString.trim().isEmpty()) {
+            serviceClient = new BlobServiceClientBuilder()
+                    .connectionString(storageConnectionString)
+                    .buildClient();
+        } else {
+            TokenCredential credential = new DefaultAzureCredentialBuilder().build();
+            serviceClient = new BlobServiceClientBuilder()
+                    .endpoint(storageEndpoint)
+                    .credential(credential)
+                    .buildClient();
+        }
+
+        BlobContainerClient containerClient = serviceClient.getBlobContainerClient(containerName);
+        if (!containerClient.exists()) {
+            containerClient.create();
+        }
+        return containerClient;
+    }
+
+    private String resolveServerPort() {
+        return getAppConfigurationValue("server.port", configuredServerPort);
+    }
+
+    private String resolveDownloadBaseUrl() {
+        return getAppConfigurationValue("app.report.download-base-url", configuredDownloadBaseUrl);
+    }
+
+    private String getAppConfigurationValue(String key, String fallback) {
+        try {
+            if (appConfigConnectionString != null && !appConfigConnectionString.trim().isEmpty()) {
+                ConfigurationClient client = new ConfigurationClientBuilder()
+                        .connectionString(appConfigConnectionString)
+                        .buildClient();
+                return client.getConfigurationSetting(key, null).getValue();
+            }
+            if (appConfigEndpoint != null && !appConfigEndpoint.trim().isEmpty()) {
+                ConfigurationClient client = new ConfigurationClientBuilder()
+                        .endpoint(appConfigEndpoint)
+                        .credential(new DefaultAzureCredentialBuilder().build())
+                        .buildClient();
+                return client.getConfigurationSetting(key, null).getValue();
+            }
+        } catch (Exception ignored) {
+        }
+        return fallback;
     }
 }
