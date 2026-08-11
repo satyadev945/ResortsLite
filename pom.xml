@@ -19,6 +19,7 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <aws.sdk.version>2.25.11</aws.sdk.version>
     </properties>
 
     <dependencies>
@@ -46,6 +47,49 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- AWS SDK v2 S3 dependency for cloud-native object storage (replaces local file system) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sts</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <!-- AWS Secrets Manager SDK for cr-java-0069: replaces hard-coded DB credentials -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <!-- cr-java-0090 FIX: Amazon Cognito Identity Provider SDK for user identity management.
+             Replaces file-based authentication / local user data storage with Amazon Cognito
+             User Pool, providing centralized, encrypted, and auditable authentication with
+             built-in user lifecycle management. The COGNITO_USER_POOL_ID and COGNITO_CLIENT_ID
+             environment variables configure the target User Pool at runtime. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>cognitoidentityprovider</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Session Data Redis — stores HTTP session state in
+             Amazon ElastiCache for Redis instead of local JVM memory. Enables stateless
+             application instances, horizontal scaling across EC2, and session persistence
+             across auto-scaling events and instance replacements. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Boot Redis starter — provides the Lettuce Redis client
+             and auto-configuration for connecting to Amazon ElastiCache for Redis.
+             Connection details are supplied via SPRING_REDIS_HOST / SPRING_REDIS_PORT
+             environment variables or application.properties. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
     </dependencies>
 
