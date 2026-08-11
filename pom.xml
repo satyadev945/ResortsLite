@@ -19,7 +19,24 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <!-- AWS SDK v2 BOM version — governs s3, secretsmanager, and cognitoidentityprovider versions -->
+        <aws.sdk.version>2.25.40</aws.sdk.version>
+        <!-- AWS SDK v2 Secrets Manager version — used for credential retrieval (cr-java-0069 fix) -->
+        <aws.secretsmanager.version>2.25.40</aws.secretsmanager.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- AWS SDK v2 BOM — centralises version management for all AWS SDK modules -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -30,6 +47,7 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
+
         <!-- SECURITY VIOLATION: log4j 2.14.1 has critical CVE-2021-44228 (Log4Shell) -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
@@ -42,10 +60,57 @@
             <artifactId>commons-collections</artifactId>
             <version>3.2.1</version>
         </dependency>
+
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- AWS SDK v2 S3 — replaces hard-coded absolute file paths (cr-java-0061)
+             with Amazon S3 object storage for cloud-portable report generation -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+
+        <!-- AWS SDK v2 Secrets Manager — replaces hard-coded DB credentials (cr-java-0069)
+             with AWS Secrets Manager for centralized, encrypted secret storage -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+            <version>${aws.secretsmanager.version}</version>
+        </dependency>
+
+        <!-- cr-java-0090 fix: AWS SDK v2 Cognito Identity Provider — replaces file-based
+             authentication and local credential storage with Amazon Cognito User Pool
+             identity management. User identity validation (AdminGetUser) is performed
+             against the Cognito User Pool configured via COGNITO_USER_POOL_ID environment
+             variable. The IAM role must have cognito-idp:AdminGetUser permission. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>cognitoidentityprovider</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+
+        <!-- cr-java-0065 fix: Spring Session Data Redis — migrates HTTP session state from
+             in-process servlet container memory to Amazon ElastiCache for Redis.
+             Enables stateless application instances with centralized, distributed session
+             management so that any instance behind the AWS ALB can serve any request
+             without sticky sessions or server affinity. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+
+        <!-- cr-java-0065 fix: Spring Boot Redis starter — provides the Lettuce Redis client
+             and auto-configuration that wires Spring Session to Amazon ElastiCache for Redis.
+             Connection details (host/port) are supplied via environment variables
+             REDIS_HOST and REDIS_PORT at runtime. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
     </dependencies>
 

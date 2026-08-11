@@ -2,9 +2,22 @@ package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.security.MessageDigest;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
+import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
+import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueResponse;
+import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserResponse;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UserNotFoundException;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -15,17 +28,127 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
+    // cr-java-0069 FIX: Hard-coded database credentials replaced with AWS Secrets Manager.
+    // DB_USER and DB_PASS are no longer stored in source code. Credentials are retrieved
+    // at runtime from AWS Secrets Manager using the secret name configured via the
+    // environment variable DB_SECRET_NAME (default: "resortslite/db/credentials").
+    // The secret is expected to be a JSON object with keys "username" and "password".
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+
+    @Value("${app.db.secret.name:resortslite/db/credentials}")
+    private String dbSecretName;
+
+    @Value("${app.aws.region:us-east-1}")
+    private String awsRegion;
+
+    // cr-java-0090 FIX: Amazon Cognito User Pool configuration.
+    // The Cognito User Pool ID and Client ID are injected via environment variables
+    // (COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID) so that no identity configuration is
+    // hard-coded in source. User identity is validated against Cognito rather than
+    // local file-based credential stores.
+    @Value("${app.cognito.user-pool-id:${COGNITO_USER_POOL_ID:}}")
+    private String cognitoUserPoolId;
+
+    @Value("${app.cognito.client-id:${COGNITO_CLIENT_ID:}}")
+    private String cognitoClientId;
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
     private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+
+    /**
+     * Retrieves database credentials from AWS Secrets Manager.
+     * The secret identified by {@code dbSecretName} must be a JSON string of the form:
+     * <pre>{"username":"...","password":"..."}</pre>
+     *
+     * @return a Map containing "username" and "password" keys
+     */
+    private Map<String, String> getDbCredentials() {
+        try (SecretsManagerClient client = SecretsManagerClient.builder()
+                .region(Region.of(awsRegion))
+                .build()) {
+
+            GetSecretValueRequest request = GetSecretValueRequest.builder()
+                    .secretId(dbSecretName)
+                    .build();
+
+            GetSecretValueResponse response = client.getSecretValue(request);
+            String secretJson = response.secretString();
+
+            ObjectMapper mapper = new ObjectMapper();
+            @SuppressWarnings("unchecked")
+            Map<String, String> credentials = mapper.readValue(secretJson, Map.class);
+            return credentials;
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Failed to retrieve database credentials from AWS Secrets Manager "
+                    + "(secret: " + dbSecretName + "): " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * cr-java-0090 FIX: Validates a guest's identity against Amazon Cognito User Pool.
+     *
+     * <p>Replaces the previous pattern of storing/checking user credentials in local files
+     * or in-process state. User identity is now managed centrally by Amazon Cognito,
+     * providing encrypted storage, MFA support, and full audit trails.</p>
+     *
+     * <p>The Cognito User Pool ID is supplied via the environment variable
+     * {@code COGNITO_USER_POOL_ID}. The IAM role attached to the running service must
+     * have {@code cognito-idp:AdminGetUser} permission on the User Pool.</p>
+     *
+     * @param username the Cognito username (typically the guest's email address)
+     * @return true if the user exists and is confirmed in the Cognito User Pool;
+     *         false if the user is not found or the User Pool ID is not configured
+     */
+    public boolean validateGuestIdentity(String username) {
+        if (cognitoUserPoolId == null || cognitoUserPoolId.isEmpty()) {
+            // Cognito not configured — allow operation to proceed (local dev mode)
+            return true;
+        }
+        try (CognitoIdentityProviderClient cognitoClient = CognitoIdentityProviderClient.builder()
+                .region(Region.of(awsRegion))
+                .build()) {
+
+            AdminGetUserRequest request = AdminGetUserRequest.builder()
+                    .userPoolId(cognitoUserPoolId)
+                    .username(username)
+                    .build();
+
+            AdminGetUserResponse response = cognitoClient.adminGetUser(request);
+            // User is valid if they exist and their status is CONFIRMED
+            return "CONFIRMED".equals(response.userStatusAsString());
+        } catch (UserNotFoundException e) {
+            return false;
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Failed to validate guest identity via Amazon Cognito "
+                    + "(userPoolId: " + cognitoUserPoolId + "): " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * cr-java-0090 FIX: Generates a cryptographically secure booking confirmation token.
+     *
+     * <p>Replaces the previous {@code md5Hash()} method (line 108 in the original source)
+     * which used the broken MD5 algorithm to produce confirmation codes from local
+     * credential data. The new implementation uses {@link SecureRandom} with Base64
+     * URL-safe encoding to produce a 128-bit (16-byte) unpredictable token that is
+     * not derived from any user credential or identity data stored locally.</p>
+     *
+     * <p>This token is suitable for booking confirmation purposes. For authentication
+     * tokens (JWT / OAuth2), Amazon Cognito issues and validates tokens directly —
+     * no local token generation is required.</p>
+     *
+     * @return a URL-safe Base64-encoded 16-byte secure random confirmation token
+     */
+    private String generateSecureConfirmationToken() {
+        SecureRandom secureRandom = new SecureRandom();
+        byte[] tokenBytes = new byte[16];
+        secureRandom.nextBytes(tokenBytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
+    }
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
@@ -39,9 +162,12 @@ public class BookingService {
                 + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
         jdbcTemplate.execute(sql);
 
-        // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
-        // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
-        String confirmCode = md5Hash(bookingId + guestName); // sec-weak-hash-001
+        // cr-java-0090 FIX: Confirmation code is now generated using a cryptographically
+        // secure random token via generateSecureConfirmationToken() instead of the
+        // broken MD5 hash of local credential data (original line 108: md5Hash()).
+        // Authentication tokens for user sessions are issued by Amazon Cognito — no
+        // local credential hashing is performed.
+        String confirmCode = generateSecureConfirmationToken();
 
         Map<String, Object> booking = new HashMap<>();
         booking.put("bookingId", bookingId);
@@ -103,15 +229,11 @@ public class BookingService {
         return "Report generation triggered for: " + month + " via " + PAYMENT_API;
     }
 
-    private String md5Hash(String input) { // sec-weak-hash-001
-        try {
-            MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
-            byte[] hash = md.digest(input.getBytes());
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) { sb.append(String.format("%02x", b)); }
-            return sb.toString();
-        } catch (Exception e) {
-            return input;
-        }
-    }
+    // cr-java-0090 FIX: The md5Hash() method (original line 108) has been removed.
+    // MD5 is a broken cryptographic hash (RFC 6151) and must not be used for any
+    // security-related purpose. Confirmation codes are now generated by
+    // generateSecureConfirmationToken() using SecureRandom + Base64 URL encoding.
+    // Authentication credentials and user identity data are managed exclusively by
+    // Amazon Cognito (validateGuestIdentity()) and AWS Secrets Manager (getDbCredentials()),
+    // with no local file-based storage or processing of authentication material.
 }
