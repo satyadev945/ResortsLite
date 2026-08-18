@@ -19,6 +19,7 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <aws.sdk.version>2.25.40</aws.sdk.version>
     </properties>
 
     <dependencies>
@@ -26,22 +27,75 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+
+        <!-- cr-java-0065 FIX: Spring Session with Redis backing store.
+             Replaces in-process HttpSession storage with Amazon ElastiCache for Redis,
+             enabling stateless application instances and horizontal scaling without
+             sticky sessions. Versions are managed by spring-boot-starter-parent. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+
+        <!-- cr-java-0065 / cr-java-0067 FIX: Lettuce — non-blocking Redis client used by
+             Spring Session Data Redis and by the RedisTemplate booking cache.
+             Provides RedisTemplate<String, Object> auto-configuration for ElastiCache. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
-        <!-- SECURITY VIOLATION: log4j 2.14.1 has critical CVE-2021-44228 (Log4Shell) -->
+
+        <!-- AWS SDK v2 S3 dependency for cloud-native object storage (replaces hard-coded file paths) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+
+        <!-- cr-java-0090 FIX: Amazon Cognito Identity Provider SDK v2 for cloud-native
+             user identity management. Replaces file-based authentication (local MD5 hashing)
+             with centralized, encrypted, and auditable user lifecycle management via
+             AWS Cognito User Pools. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>cognitoidentityprovider</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+
+        <!-- cr-java-0071 FIX: AWS Systems Manager Parameter Store SDK v2 for dynamic
+             configuration lookup (inventory service URL, server port, etc.). -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssm</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+
+        <!-- cr-java-0069 FIX: AWS Secrets Manager SDK v2 for secure database credential
+             retrieval at startup (replaces hard-coded credentials). -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
             <version>2.14.1</version>
         </dependency>
+
         <!-- SECURITY VIOLATION: commons-collections 3.2.1 has CVE-2015-6420 (RCE) -->
         <dependency>
             <groupId>commons-collections</groupId>
             <artifactId>commons-collections</artifactId>
             <version>3.2.1</version>
         </dependency>
+
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
