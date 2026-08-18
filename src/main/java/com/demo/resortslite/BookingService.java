@@ -2,6 +2,7 @@ package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
@@ -15,17 +16,25 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
-    private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
+    // cz-java-0062: Replaced hardcoded DB hostname "db-prod.resorts-internal.com" with an
+    // environment variable resolved via AWS Service Connect on ECS Fargate. AWS Service Connect
+    // allows containers to discover and connect to each other by logical service name, removing
+    // all hardcoded internal IPs/hostnames from Java inter-service calls.
+    // Set DB_HOST in the ECS Fargate task definition to the Service Connect endpoint
+    // (e.g. db-service or the RDS endpoint resolved via AWS service discovery).
+    @Value("${DB_HOST:db-service}")
+    private String dbHost; // cz-java-0062
+
     private static final String DB_USER = "admin";                         // sec-cred-001
     private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
 
-    // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
-    // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
-    // or scaling events. Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+    // cz-java-0082: Replaced hardcoded payment service IP/port with ECS Service Connect
+    // environment variable (PAYMENT_SERVICE_URL). ECS Service Connect provides automatic
+    // service discovery, mTLS, and traffic observability between independently deployed
+    // Fargate services. Set PAYMENT_SERVICE_URL in the ECS task definition to the Service
+    // Connect endpoint (e.g. http://payment-service:9090/payments/charge).
+    @Value("${PAYMENT_SERVICE_URL:http://payment-service:9090/payments/charge}")
+    private String paymentApi;
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
@@ -50,7 +59,9 @@ public class BookingService {
         booking.put("checkIn", checkIn);
         booking.put("checkOut", checkOut);
         booking.put("confirmationCode", confirmCode);
-        booking.put("dbHost", DB_HOST);
+        // cz-java-0062: Use the environment-variable-backed dbHost field instead of the
+        // former hardcoded constant "db-prod.resorts-internal.com".
+        booking.put("dbHost", dbHost);
         return booking;
     }
 
@@ -100,7 +111,7 @@ public class BookingService {
     }
 
     public String generateReport(String month) {
-        return "Report generation triggered for: " + month + " via " + PAYMENT_API;
+        return "Report generation triggered for: " + month + " via " + paymentApi;
     }
 
     private String md5Hash(String input) { // sec-weak-hash-001
