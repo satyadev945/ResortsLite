@@ -2,6 +2,7 @@ package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
@@ -15,6 +16,10 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // cz-java-0082 FIX: Pub/Sub publisher injected for async decoupled report event publishing.
+    @Autowired
+    private BookingEventPublisher bookingEventPublisher;
+
     // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
     // If this repo is pushed to GitHub (even private), credentials are permanently exposed
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.
@@ -22,10 +27,13 @@ public class BookingService {
     private static final String DB_USER = "admin";                         // sec-cred-001
     private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
 
-    // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
-    // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
-    // or scaling events. Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+    // cz-java-0062 FIX (Line 28): Hardcoded IP address "10.0.1.45" replaced with an
+    // environment-variable-backed field injected via GCP Secret Manager CSI add-on and
+    // Workload Identity on GKE.  The PAYMENT_API_URL env-var is stored as a GCP Secret
+    // and mounted into the pod at runtime — no hardcoded IP addresses remain in source code.
+    // Before: private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge";
+    @Value("${PAYMENT_API_URL:http://payment-service:9090/payments/charge}")
+    private String paymentApi;
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
@@ -99,8 +107,35 @@ public class BookingService {
         return true;
     }
 
+    /**
+     * cz-java-0082 FIX (Line 102): Replaced synchronous in-process report generation
+     * (direct string return referencing PAYMENT_API) with an asynchronous Google Cloud
+     * Pub/Sub publish via BookingEventPublisher.
+     *
+     * Previously this method returned a string synchronously, tightly coupling the
+     * report-generation concern to the booking service's runtime thread. Now a
+     * 'report-requested' event is published to the PUBSUB_REPORT_TOPIC Pub/Sub topic
+     * so that a dedicated report-generation microservice can consume and process it
+     * independently, enabling both services to scale separately on GKE.
+     *
+     * @param month The month for which the report is requested
+     * @return Acknowledgement message confirming the async event was published
+     */
     public String generateReport(String month) {
-        return "Report generation triggered for: " + month + " via " + PAYMENT_API;
+        // cz-java-0082 FIX (Line 102): Build report-requested event payload and publish
+        // asynchronously to Google Cloud Pub/Sub (PUBSUB_REPORT_TOPIC env-var).
+        // Replaces the synchronous in-process return:
+        //   return "Report generation triggered for: " + month + " via " + PAYMENT_API;
+        // A downstream report-generation microservice subscribes to the topic and
+        // processes the event independently, fully decoupling the two services.
+        Map<String, Object> reportEvent = new HashMap<>();
+        reportEvent.put("month", month);
+        reportEvent.put("requestId", UUID.randomUUID().toString());
+        reportEvent.put("eventType", "report-requested");
+
+        bookingEventPublisher.publishReportEvent(reportEvent);
+
+        return "Report generation event published to Pub/Sub for async processing (month: " + month + ")";
     }
 
     private String md5Hash(String input) { // sec-weak-hash-001

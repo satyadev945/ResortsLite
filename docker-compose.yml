@@ -1,0 +1,35 @@
+version: "3.8"
+
+services:
+  resortslite:
+    image: resortslite:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resortslite-app
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - REDIS_HOST=${REDIS_HOST:-redis-service}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-my-gcp-project}
+      - PUBSUB_BOOKING_TOPIC=${PUBSUB_BOOKING_TOPIC:-booking-events}
+      - PUBSUB_REPORT_TOPIC=${PUBSUB_REPORT_TOPIC:-report-events}
+      - JWT_SIGNING_KEY=${JWT_SIGNING_KEY:-default-dev-signing-key-replace-in-production}
+      - REPORT_BASE_PATH=${REPORT_BASE_PATH:-/var/reports}
+      - BOOKING_CACHE_TTL_SECONDS=${BOOKING_CACHE_TTL_SECONDS:-3600}
+      - PAYMENT_API_URL=${PAYMENT_API_URL:-http://payment-service:9090/payments/charge}
+    volumes:
+      - reports-data:/var/reports
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  reports-data:
+    driver: local
