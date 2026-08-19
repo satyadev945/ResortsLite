@@ -30,6 +30,19 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
+        <!-- Health check endpoint via Spring Boot Actuator (/actuator/health) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- cz-java-0069: Spring Data Redis (Lettuce) for distributed booking cache.
+             Replaces in-memory static HashMap with Redis-backed distributed cache.
+             Redis connection is configured via REDIS_HOST and REDIS_PORT environment
+             variables, enabling KEDA Redis Queue-Based Autoscaling on AKS. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
         <!-- SECURITY VIOLATION: log4j 2.14.1 has critical CVE-2021-44228 (Log4Shell) -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
@@ -46,6 +59,43 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- cz-java-0063: JJWT library for stateless JWT authentication.
+             Replaces server-side HttpSession storage. JWT signing key is sourced from
+             Azure Key Vault via JWT_SECRET_KEY environment variable, enabling
+             KEDA-driven autoscaling of stateless AKS pods. -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.11.5</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.11.5</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.11.5</version>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- cz-java-0082: Azure Service Bus SDK for async decoupled messaging between
+             AKS microservices. Replaces tightly-coupled synchronous cross-domain calls
+             (BookingController -> BookingService and BookingService -> PAYMENT_API) with
+             Azure Service Bus topics/queues, enabling independent deployment and scaling
+             of each microservice on AKS. Connection string is sourced from environment
+             variable AZURE_SERVICE_BUS_CONNECTION_STRING. -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-messaging-servicebus</artifactId>
+            <version>7.15.1</version>
+        </dependency>
+        <!-- Jackson for JSON serialization of Service Bus message payloads -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
         </dependency>
     </dependencies>
 

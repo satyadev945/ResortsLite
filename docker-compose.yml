@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  resortslite:
+    image: resortslite:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resortslite-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: "8080"
+      # Redis distributed cache (provide external Redis host)
+      REDIS_HOST: ${REDIS_HOST:-localhost}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      BOOKING_CACHE_TTL_SECONDS: ${BOOKING_CACHE_TTL_SECONDS:-3600}
+      # Azure Service Bus (set connection string via .env or environment)
+      AZURE_SERVICE_BUS_CONNECTION_STRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:-}
+      AZURE_SERVICE_BUS_BOOKING_QUEUE: ${AZURE_SERVICE_BUS_BOOKING_QUEUE:-booking-events-queue}
+      AZURE_SERVICE_BUS_REPORT_QUEUE: ${AZURE_SERVICE_BUS_REPORT_QUEUE:-report-events-queue}
+      # JWT secret key (override in production)
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-default-dev-secret-key-replace-in-production}
+      # Report / backup paths
+      REPORT_BASE_PATH: ${REPORT_BASE_PATH:-/mnt/reports}
+      BACKUP_PATH: ${BACKUP_PATH:-/mnt/backups}
+      # Database host
+      DB_HOST: ${DB_HOST:-localhost}
+      # JVM options
+      JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+    volumes:
+      - reports-data:/mnt/reports
+      - backups-data:/mnt/backups
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  reports-data:
+  backups-data:
+
+networks:
+  app-network:
+    driver: bridge
