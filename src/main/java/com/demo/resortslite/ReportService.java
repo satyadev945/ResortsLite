@@ -5,8 +5,11 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+// FIXED (JAVA8_TO_17_DEPRECATED_API): Replaced legacy java.util.Date and SimpleDateFormat
+// with java.time.LocalDateTime and DateTimeFormatter — the modern Java 8+ date/time API.
+// java.util.Date and SimpleDateFormat are not thread-safe and are considered legacy since Java 8.
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -26,6 +29,11 @@ public class ReportService {
     // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
     // dynamic port binding required for modern container deployment and service discovery.
     private static final int SERVER_PORT = 8080; // czr-port-001
+
+    // FIXED: DateTimeFormatter is thread-safe (unlike SimpleDateFormat) and part of the
+    // modern java.time API introduced in Java 8 and fully supported in Java 17.
+    private static final DateTimeFormatter TIMESTAMP_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
@@ -67,7 +75,9 @@ public class ReportService {
     }
 
     public Map<String, Object> getSystemInfo() { // doc-missing-001
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        // FIXED (JAVA8_TO_17_DEPRECATED_API): Replaced new Date() + SimpleDateFormat.format()
+        // with LocalDateTime.now() + DateTimeFormatter.format() — modern, thread-safe API.
+        String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
         Map<String, Object> info = new HashMap<>();
         info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
         info.put("backupPath", BACKUP_PATH);        // czr-java-001

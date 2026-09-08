@@ -39,9 +39,10 @@ public class BookingService {
                 + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
         jdbcTemplate.execute(sql);
 
-        // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
-        // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
-        String confirmCode = md5Hash(bookingId + guestName); // sec-weak-hash-001
+        // FIXED (JAVA8_TO_17_WEAK_CRYPTO): Replaced MD5 MessageDigest with SHA-256.
+        // MD5 is a broken hash algorithm (RFC 6151) and must not be used for any
+        // security-related purpose. SHA-256 is the minimum acceptable algorithm.
+        String confirmCode = sha256Hash(bookingId + guestName);
 
         Map<String, Object> booking = new HashMap<>();
         booking.put("bookingId", bookingId);
@@ -103,9 +104,12 @@ public class BookingService {
         return "Report generation triggered for: " + month + " via " + PAYMENT_API;
     }
 
-    private String md5Hash(String input) { // sec-weak-hash-001
+    // FIXED (JAVA8_TO_17_WEAK_CRYPTO): Replaced md5Hash with sha256Hash.
+    // SHA-256 is a cryptographically strong algorithm suitable for confirmation codes.
+    // MD5 (RFC 6151) is broken and must not be used for security-sensitive hashing.
+    private String sha256Hash(String input) {
         try {
-            MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] hash = md.digest(input.getBytes());
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
