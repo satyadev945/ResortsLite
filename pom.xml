@@ -8,49 +8,93 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.7.18</version>
+        <!-- Updated from 2.7.15 to 3.2.5 for full Java 17 compatibility.
+             Spring Boot 3.x requires Java 17+ and migrates from javax.* to jakarta.* namespace.
+             Issue: framework-compatibility — Spring Boot 2.7.x incompatible with Java 17 Jakarta EE migration. -->
+        <version>3.2.5</version>
+        <relativePath/>
     </parent>
 
     <groupId>com.demo</groupId>
     <artifactId>resortsLite</artifactId>
     <version>1.0.0</version>
     <name>ResortsLite</name>
-    <description>Legacy resort booking demo — Java 8 / Spring Boot 2.7.x</description>
+    <description>Resort booking demo — Java 17 / Spring Boot 3.2.x</description>
 
     <properties>
-        <java.version>1.8</java.version>
+        <!-- Updated from 1.8 to 17 to fix: build-configuration — Java version property set to 1.8.
+             Java 17 is the target runtime; source/target/release all set to 17. -->
+        <java.version>17</java.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
     </properties>
 
     <dependencies>
+        <!-- Spring Boot Web starter — managed by Spring Boot 3.2.5 parent (no explicit version needed) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+
+        <!-- Spring Boot JDBC starter — managed by Spring Boot 3.2.5 parent -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
-        <!-- SECURITY VIOLATION: log4j 2.14.1 has critical CVE-2021-44228 (Log4Shell) -->
+
+        <!-- Updated log4j-core from 2.14.1 (CVE-2021-44228 Log4Shell RCE vulnerability) to 2.23.1.
+             Issue: maven-dependencies — log4j-core 2.14.1 CVE-2021-44228 Log4Shell RCE vulnerability.
+             Spring Boot 3.x uses Logback by default; explicit version pin ensures safe transitive resolution. -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
-            <version>2.14.1</version>
+            <version>2.23.1</version>
         </dependency>
-        <!-- SECURITY VIOLATION: commons-collections 3.2.1 has CVE-2015-6420 (RCE) -->
+
+        <!-- Updated commons-collections from 3.2.1 (CVE-2015-6420 RCE vulnerability) to 3.2.2 (patched).
+             Issue: maven-dependencies — commons-collections 3.2.1 CVE-2015-6420 RCE vulnerability. -->
         <dependency>
             <groupId>commons-collections</groupId>
             <artifactId>commons-collections</artifactId>
-            <version>3.2.1</version>
+            <version>3.2.2</version>
         </dependency>
+
+        <!-- H2 in-memory database for development/testing — managed by Spring Boot parent -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
         </dependency>
+
+        <!-- Spring Boot Test starter — managed by Spring Boot parent -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <!-- Updated maven-compiler-plugin to 3.11.0 with explicit Java 17 source/target/release.
+                 Issue: build-configuration — missing explicit maven-compiler-plugin configuration.
+                 Fixes: Java version property set to 1.8 (was defaulting to 1.8 bytecode). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                    <release>17</release>
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+
+            <!-- Spring Boot Maven plugin — managed by Spring Boot parent -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
