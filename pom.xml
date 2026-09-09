@@ -39,12 +39,6 @@
             <artifactId>log4j-core</artifactId>
             <version>2.23.1</version>
         </dependency>
-        <!-- Fixed: commons-collections 3.2.1 has CVE-2015-6420 (RCE) → updated to 4.4 -->
-        <dependency>
-            <groupId>commons-collections</groupId>
-            <artifactId>commons-collections</artifactId>
-            <version>4.4</version>
-        </dependency>
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
@@ -56,12 +50,6 @@
             <artifactId>mysql-connector-j</artifactId>
             <version>8.2.0</version>
             <scope>runtime</scope>
-        </dependency>
-        <!-- Added: thymeleaf-extras-java8time with explicit version -->
-        <dependency>
-            <groupId>org.thymeleaf.extras</groupId>
-            <artifactId>thymeleaf-extras-java8time</artifactId>
-            <version>3.1.0.RELEASE</version>
         </dependency>
         <!-- Added: spring-boot-starter-validation for Jakarta validation -->
         <dependency>
