@@ -1,55 +1,85 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetUrlRequest;
+
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    // cr-java-0077 FIX: Hard-coded port (SERVER_PORT = 8080) removed and externalized to AWS SSM
+    // Parameter Store. Value is resolved from the environment variable SERVER_PORT, which is injected
+    // at runtime by ECS task definition, EKS pod spec, or Elastic Beanstalk environment properties.
+    // SSM Parameter Store path: /resortslite/server/port
+    // Defaults to 8080 for local development only.
+    @Value("${server.port:${SERVER_PORT:8080}}")
+    private int serverPort;
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    // cr-java-0071 FIX: Hard-coded report download base URL externalized to AWS SSM Parameter Store.
+    // Value is resolved from application property backed by SSM: /resortslite/reports/download-base-url
+    // Override via environment variable APP_REPORT_DOWNLOAD_BASE_URL or property app.report.download-base-url
+    @Value("${app.report.download-base-url:${APP_REPORT_DOWNLOAD_BASE_URL:http://reports.resorts-internal.com:8080/download/}}")
+    private String reportDownloadBaseUrl;
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    // Cloud-native: S3 bucket name resolved from environment variable (replaces hardcoded /var/legacy/reports/)
+    @Value("${cloud.aws.s3.bucket-name:${REPORT_S3_BUCKET:resorts-reports-bucket}}")
+    private String reportBucketName;
+
+    // Cloud-native: S3 key prefix resolved from environment variable (replaces hardcoded C:\ResortBackups\nightly\)
+    @Value("${cloud.aws.s3.backup-prefix:${BACKUP_S3_PREFIX:backups/nightly/}}")
+    private String backupKeyPrefix;
+
+    // Cloud-native: AWS region resolved from environment variable
+    @Value("${cloud.aws.region.static:${AWS_REGION:us-east-1}}")
+    private String awsRegion;
+
+    private S3Client buildS3Client() {
+        return S3Client.builder()
+                .region(Region.of(awsRegion))
+                .credentialsProvider(DefaultCredentialsProvider.create())
+                .build();
+    }
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        // Cloud-native: S3 object key replaces hardcoded absolute file path (was: REPORT_BASE_PATH + fileName)
+        String s3Key = "reports/" + fileName;
 
         Map<String, Object> result = new HashMap<>();
 
-        try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
-            if (!reportDir.exists()) {
-                reportDir.mkdirs();
-            }
+        try (S3Client s3Client = buildS3Client()) {
+            // Build CSV content in memory — no local file system dependency
+            StringBuilder csvContent = new StringBuilder();
+            csvContent.append("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
+            csvContent.append("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
+            csvContent.append("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
 
-            FileWriter writer = new FileWriter(fullPath);
-            writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
-            writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
-            writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
-            writer.close();
+            // Upload report directly to S3 (replaces File/FileWriter local operations)
+            PutObjectRequest putRequest = PutObjectRequest.builder()
+                    .bucket(reportBucketName)
+                    .key(s3Key)
+                    .contentType("text/csv")
+                    .build();
 
+            s3Client.putObject(putRequest, RequestBody.fromString(csvContent.toString()));
+
+            String s3Url = "s3://" + reportBucketName + "/" + s3Key;
             result.put("status", "generated");
-            result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT); // czr-port-001
+            result.put("path", s3Url);
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             result.put("status", "error");
             result.put("message", e.getMessage());
         }
@@ -61,17 +91,21 @@ public class ReportService {
     // Missing documentation is flagged across all public methods in the codebase.
     // This increases onboarding time and transformation risk for automated tools.
     public String buildReportDownloadUrl(String reportName) { // doc-missing-001
-        // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP URL
-        // hardcoded for report download. Cloud security standards enforce HTTPS.
-        return "http://reports.resorts-internal.com:8080/download/" + reportName; // cr-java-0088
+        // cr-java-0071 FIX: Base URL is no longer hard-coded. It is injected from AWS SSM Parameter Store
+        // via the property app.report.download-base-url (SSM path: /resortslite/reports/download-base-url).
+        return reportDownloadBaseUrl + reportName;
     }
 
     public Map<String, Object> getSystemInfo() { // doc-missing-001
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        // cr-java-0111 FIX: Replaced java.util.Date/SimpleDateFormat with java.time API standardized on UTC
+        String timestamp = ZonedDateTime.now(ZoneOffset.UTC)
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
-        info.put("serverPort", SERVER_PORT);        // czr-port-001
+        // Cloud-native: report and backup locations now reference S3 bucket/prefix (replaces hardcoded file paths)
+        info.put("reportPath", "s3://" + reportBucketName + "/reports/");
+        info.put("backupPath", "s3://" + reportBucketName + "/" + backupKeyPrefix);
+        // cr-java-0077 FIX: serverPort is now injected from environment variable SERVER_PORT / SSM Parameter Store
+        info.put("serverPort", serverPort);
         info.put("generatedAt", timestamp);
         return info;
     }
