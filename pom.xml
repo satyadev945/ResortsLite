@@ -19,7 +19,21 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <aws.sdk.version>2.25.40</aws.sdk.version>
     </properties>
+
+    <!-- AWS SDK v2 BOM: manages versions for all AWS SDK v2 modules -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -62,6 +76,44 @@
             <groupId>com.oracle.database.jdbc</groupId>
             <artifactId>ucp</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- AWS SDK v2: S3 client — replaces hard-coded file-system paths (cr-java-0061) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+        <!-- AWS SDK v2: URL Connection HTTP client (no Netty required for Java 8 compat) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+        </dependency>
+        <!-- AWS SDK v2: Secrets Manager — replaces hard-coded DB credentials (cr-java-0069) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+        </dependency>
+        <!-- Jackson for parsing Secrets Manager JSON payloads -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- AWS SDK v2: SSM Parameter Store — replaces hard-coded environment URLs (cr-java-0071) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssm</artifactId>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Session with Redis backing store.
+             Replaces server-local HttpSession with distributed session management
+             backed by Amazon ElastiCache for Redis. Enables stateless, horizontally
+             scalable application instances behind AWS ALB without session affinity. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- Redis client required by Spring Session for ElastiCache connectivity -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
     </dependencies>
 
