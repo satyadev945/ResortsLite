@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  resortslite:
+    image: resortslite:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resortslite-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      # Oracle DataSource — supply real values at runtime
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:oracle:thin:@localhost:1521:ORCL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-admin}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-changeme}
+      # Amazon ElastiCache (Redis) — supply real values at runtime
+      REDIS_HOST: ${REDIS_HOST:-localhost}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # Internal service endpoints
+      APP_PAYMENT_ENDPOINT: ${APP_PAYMENT_ENDPOINT:-http://payment-svc:9090/charge}
+      APP_INVENTORY_ENDPOINT: ${APP_INVENTORY_ENDPOINT:-http://inventory-svc:8081/rooms}
+      APP_NOTIFICATION_ENDPOINT: ${APP_NOTIFICATION_ENDPOINT:-http://notify-svc:7070/send}
+      # File paths
+      REPORT_BASE_PATH: ${REPORT_BASE_PATH:-/var/reports}
+      BACKUP_PATH: ${BACKUP_PATH:-/var/backups/nightly}
+      # Cache TTL
+      BOOKING_CACHE_TTL_SECONDS: ${BOOKING_CACHE_TTL_SECONDS:-3600}
+      # JVM options
+      JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+    volumes:
+      - reports-data:/var/reports
+      - backups-data:/var/backups/nightly
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  reports-data:
+  backups-data:
+
+networks:
+  app-network:
+    driver: bridge
