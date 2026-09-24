@@ -37,7 +37,7 @@ spec:
               value: "{{REDIS_HOST}}"
             - name: REDIS_PORT
               value: "{{REDIS_PORT}}"
-            # Oracle datasource
+            # PostgreSQL datasource
             - name: SPRING_DATASOURCE_URL
               value: "{{SPRING_DATASOURCE_URL}}"
             - name: SPRING_DATASOURCE_USERNAME
