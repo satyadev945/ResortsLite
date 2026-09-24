@@ -1,7 +1,11 @@
 package com.demo.resortslite;
 
+import com.google.cloud.secretmanager.v1.AccessSecretVersionResponse;
+import com.google.cloud.secretmanager.v1.SecretManagerServiceClient;
+import com.google.cloud.secretmanager.v1.SecretVersionName;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
@@ -15,17 +19,65 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
+    // cr-java-0069 [Cloud Readiness / Critical]: Hard-coded database credentials replaced
+    // with Google Secret Manager integration via Spring Cloud GCP Secret Manager.
+    // Secrets are resolved at runtime using the sm:// URI scheme so that credentials
+    // are never stored in source code or container images, enabling rotation without
+    // redeployment and satisfying GCP cloud security compliance requirements.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+
+    @Value("${spring.datasource.username}")
+    private String dbUser;   // resolved from Secret Manager via sm://projects/<project>/secrets/db-username/versions/latest
+
+    @Value("${spring.datasource.password}")
+    private String dbPass;   // resolved from Secret Manager via sm://projects/<project>/secrets/db-password/versions/latest
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
     private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+
+    // cr-java-0090 [Security & Authentication / High]: GCP project ID injected via
+    // environment variable for Secret Manager access — never hard-coded in source.
+    @Value("${GCP_PROJECT_ID:my-gcp-project}")
+    private String gcpProjectId;
+
+    /**
+     * cr-java-0090 [File-based Authentication — Remediation]:
+     * Retrieves a secret value from Google Secret Manager using the Secret Manager
+     * client library and Cloud IAM for service-to-service authentication.
+     *
+     * <p>Authentication is handled transparently by Application Default Credentials (ADC):
+     * <ul>
+     *   <li>On GCP (Cloud Run / GKE) the workload's attached service account is used
+     *       automatically — no credential files are read from the local filesystem.</li>
+     *   <li>Locally, developers authenticate once with {@code gcloud auth application-default login};
+     *       the resulting token is managed by the gcloud SDK, not by application code.</li>
+     * </ul>
+     *
+     * <p>This replaces any pattern where credentials or tokens were loaded from local
+     * files (e.g., {@code new FileInputStream("credentials.json")}) with a fully
+     * cloud-native, IAM-governed secret retrieval that works across all GCP environments
+     * without file-system dependencies.
+     *
+     * @param secretId the Secret Manager secret ID (e.g., "db-username")
+     * @param versionId the secret version (e.g., "latest")
+     * @return the plaintext secret value
+     * @throws RuntimeException if the secret cannot be retrieved
+     */
+    public String getSecretFromSecretManager(String secretId, String versionId) {
+        // SecretManagerServiceClient uses Application Default Credentials (ADC) —
+        // Cloud IAM governs access; no local credential files are involved.
+        try (SecretManagerServiceClient client = SecretManagerServiceClient.create()) {
+            SecretVersionName secretVersionName =
+                    SecretVersionName.of(gcpProjectId, secretId, versionId);
+            AccessSecretVersionResponse response = client.accessSecretVersion(secretVersionName);
+            return response.getPayload().getData().toStringUtf8();
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Failed to retrieve secret '" + secretId + "' from Google Secret Manager", e);
+        }
+    }
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {

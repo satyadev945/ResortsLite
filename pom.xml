@@ -19,7 +19,22 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <!-- Spring Cloud GCP BOM version aligned with Spring Boot 2.7.x -->
+        <spring-cloud-gcp.version>3.7.9</spring-cloud-gcp.version>
     </properties>
+
+    <!-- Spring Cloud GCP BOM — manages all spring-cloud-gcp artifact versions -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.google.cloud</groupId>
+                <artifactId>spring-cloud-gcp-dependencies</artifactId>
+                <version>${spring-cloud-gcp.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -66,6 +81,43 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- Google Cloud Storage SDK — replaces hard-coded local file paths (cr-java-0061) -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-storage</artifactId>
+            <version>2.36.1</version>
+        </dependency>
+        <!-- cr-java-0069: Spring Cloud GCP Secret Manager — resolves database credentials
+             from GCP Secret Manager at runtime using the sm:// URI scheme.
+             Eliminates hard-coded DB_USER / DB_PASS constants from source code. -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>spring-cloud-gcp-starter-secretmanager</artifactId>
+        </dependency>
+        <!-- cr-java-0090: Google Cloud Secret Manager client library — used by
+             BookingService.getSecretFromSecretManager() to retrieve secrets via
+             Cloud IAM / Application Default Credentials (ADC) without any local
+             credential files, replacing file-based authentication patterns. -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-secretmanager</artifactId>
+            <version>2.45.0</version>
+        </dependency>
+        <!-- cr-java-0065 remediation: Spring Session backed by Redis for stateless,
+             horizontally-scalable session management via Google Cloud Memorystore for Redis.
+             Replaces HttpSession (server-affinity) with a shared Redis store so that any
+             application instance can serve any request without sticky sessions. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- Spring Boot Redis starter — provides RedisTemplate / StringRedisTemplate beans
+             and auto-configures the Lettuce connection factory from REDIS_HOST / REDIS_PORT
+             environment variables (mapped via spring.redis.host / spring.redis.port). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
     </dependencies>
 
