@@ -1,5 +1,6 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -13,19 +14,22 @@ import java.util.Map;
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    // cz-java-0057 [Fixed]: Absolute file paths replaced with environment variables
+    // injected via Kubernetes ConfigMap / Azure App Configuration.
+    @Value("${app.reports.base-path:/var/reports}")
+    private String REPORT_BASE_PATH;
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    // cz-java-0057 [Fixed]: Windows-style absolute path replaced with environment variable
+    // injected via Kubernetes ConfigMap / Azure App Configuration.
+    @Value("${app.reports.backup-path:/var/backups/nightly}")
+    private String BACKUP_PATH;
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    // cz-java-0061 [Fixed]: Hardcoded port replaced with environment variable backed by
+    // Kubernetes ConfigMap / AKS environment binding. The SERVER_PORT value is now injected
+    // at runtime via ${SERVER_PORT} so container orchestration (AKS/EKS) can assign ports
+    // dynamically without requiring code changes.
+    @Value("${SERVER_PORT:8080}")
+    private int SERVER_PORT;
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";

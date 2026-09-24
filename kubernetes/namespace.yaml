@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orcappdbmmono
+  labels:
+    name: orcappdbmmono
+    app.kubernetes.io/managed-by: kubectl
