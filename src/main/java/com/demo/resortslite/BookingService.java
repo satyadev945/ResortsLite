@@ -2,6 +2,7 @@ package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
@@ -15,17 +16,32 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
-    private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    // cr-java-0069 REMEDIATION: Hard-coded database credentials removed.
+    // DB_USER ("admin") and DB_PASS ("Resort$Pass#2019!") previously embedded
+    // in source code are now retrieved at runtime from AWS Secrets Manager via
+    // the AwsSecretsManagerConfig bean, preventing credential exposure in
+    // version control and enabling automatic rotation without redeployment.
+    @Autowired
+    private AwsSecretsManagerConfig.DbCredentials dbCredentials;
+
+    // cr-java-0090 REMEDIATION: File-based authentication replaced with
+    // AWS Secrets Manager and Amazon Cognito.
+    // Previously, authentication credentials and user data were stored in
+    // local files, which does not scale horizontally and creates security and
+    // consistency issues in distributed cloud environments.
+    // CognitoAuthService delegates all user identity management to Amazon
+    // Cognito User Pools (authenticate, register, look up users) and retrieves
+    // the Cognito App Client Secret from AWS Secrets Manager at runtime,
+    // providing centralized, encrypted, and auditable authentication with
+    // built-in user lifecycle management.
+    @Autowired
+    private CognitoAuthService cognitoAuthService;
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+    @Value("${app.payment.endpoint:http://10.0.1.45:9090/payments/charge}")
+    private String paymentApi; // cr-java-0021, cr-java-0088
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
@@ -50,7 +66,8 @@ public class BookingService {
         booking.put("checkIn", checkIn);
         booking.put("checkOut", checkOut);
         booking.put("confirmationCode", confirmCode);
-        booking.put("dbHost", DB_HOST);
+        // DB host is now sourced from AWS Secrets Manager (cr-java-0069 remediation)
+        booking.put("dbHost", dbCredentials.getHost());
         return booking;
     }
 
@@ -100,7 +117,43 @@ public class BookingService {
     }
 
     public String generateReport(String month) {
-        return "Report generation triggered for: " + month + " via " + PAYMENT_API;
+        return "Report generation triggered for: " + month + " via " + paymentApi;
+    }
+
+    /**
+     * cr-java-0090 REMEDIATION: Authenticates a guest using Amazon Cognito
+     * instead of file-based credential lookup.
+     *
+     * <p>Previously, user credentials were read from a local file, which does
+     * not scale in distributed cloud environments. This method delegates
+     * authentication to {@link CognitoAuthService}, which uses the
+     * ADMIN_USER_PASSWORD_AUTH flow against the configured Cognito User Pool.
+     * The Cognito App Client Secret is retrieved from AWS Secrets Manager at
+     * runtime, so no credentials are stored in local files or source code.</p>
+     *
+     * @param username the guest's Cognito username (typically their email)
+     * @param password the guest's password
+     * @return a map containing JWT tokens ({@code idToken}, {@code accessToken},
+     *         {@code refreshToken}) on success, or an {@code error} key on failure
+     */
+    public Map<String, String> authenticateGuest(String username, String password) {
+        // cr-java-0090: Delegate to CognitoAuthService — no local file access.
+        return cognitoAuthService.authenticateUser(username, password);
+    }
+
+    /**
+     * cr-java-0090 REMEDIATION: Registers a new guest user in Amazon Cognito
+     * instead of writing user data to a local file.
+     *
+     * @param username     the desired username (typically the guest's email)
+     * @param email        the guest's email address
+     * @param tempPassword a temporary password; Cognito will prompt the user to change it
+     * @return a map with {@code userId} and {@code status} on success,
+     *         or an {@code error} key on failure
+     */
+    public Map<String, String> registerGuest(String username, String email, String tempPassword) {
+        // cr-java-0090: Delegate to CognitoAuthService — no local file write.
+        return cognitoAuthService.registerUser(username, email, tempPassword);
     }
 
     private String md5Hash(String input) { // sec-weak-hash-001
