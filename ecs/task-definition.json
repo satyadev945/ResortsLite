@@ -1,0 +1,56 @@
+{
+  "family": "resortslite-task",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "resortslite",
+      "image": "{{IMAGE_URI}}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "SPRING_PROFILES_ACTIVE",              "value": "docker" },
+        { "name": "TZ",                                  "value": "UTC" },
+        { "name": "JAVA_OPTS",                           "value": "-Xmx512m -Xms256m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UnlockExperimentalVMOptions -Djava.security.egd=file:/dev/./urandom -Dfile.encoding=UTF-8 -Duser.timezone=UTC" },
+        { "name": "SERVER_PORT",                         "value": "8080" },
+        { "name": "SPRING_DATASOURCE_URL",               "value": "{{SPRING_DATASOURCE_URL}}" },
+        { "name": "SPRING_DATASOURCE_USERNAME",          "value": "{{SPRING_DATASOURCE_USERNAME}}" },
+        { "name": "SPRING_DATASOURCE_DRIVER_CLASS_NAME", "value": "oracle.jdbc.OracleDriver" },
+        { "name": "SPRING_JPA_DATABASE_PLATFORM",        "value": "org.hibernate.dialect.Oracle12cDialect" },
+        { "name": "MEMCACHED_ENDPOINT",                  "value": "{{MEMCACHED_ENDPOINT}}" },
+        { "name": "CACHE_TTL_SECONDS",                   "value": "3600" },
+        { "name": "REPORT_BASE_PATH",                    "value": "/mnt/efs/reports/" },
+        { "name": "BACKUP_PATH",                         "value": "/mnt/efs/backups/nightly/" },
+        { "name": "PAYMENT_API_URL",                     "value": "{{PAYMENT_API_URL}}" },
+        { "name": "ALB_STICKY_SESSION_DURATION_SECONDS", "value": "86400" }
+      ],
+      "secrets": [
+        {
+          "name": "SPRING_DATASOURCE_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:{{AWS_REGION}}:{{ACCOUNT_ID}}:secret:resortslite/db-password"
+        },
+        {
+          "name": "JWT_SIGNING_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:{{AWS_REGION}}:{{ACCOUNT_ID}}:secret:resortslite/jwt-secret"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/resortslite",
+          "awslogs-region": "{{AWS_REGION}}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
