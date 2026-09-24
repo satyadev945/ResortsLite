@@ -19,9 +19,34 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <!-- AWS SDK v2 BOM version — manages all aws sdk module versions -->
+        <aws.sdk.version>2.25.40</aws.sdk.version>
     </properties>
 
     <dependencies>
+        <!-- AWS SDK v2 BOM: manages consistent versions for all AWS SDK modules -->
+        <!-- cr-java-0061: required for Amazon S3 object storage integration -->
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <!-- cr-java-0090 FIX: Amazon Cognito Identity Provider SDK — replaces file-based
+             authentication (MD5 token generation) with centralised user identity management.
+             Authentication credentials are stored in AWS Secrets Manager; user identities
+             and session tokens are managed by Amazon Cognito User Pools. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>cognitoidentityprovider</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <!-- cr-java-0071: AWS SSM Parameter Store client — externalises hard-coded environment URLs -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssm</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -66,6 +91,31 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- cr-java-0061: AWS SDK v2 S3 client — replaces hard-coded local file path operations -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <!-- AWS SDK v2 URL connection client (HTTP transport) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Session Data Redis — replaces in-process HttpSession store
+             with Amazon ElastiCache for Redis, enabling stateless application instances and
+             safe horizontal scaling across multiple EC2 nodes behind the AWS ALB.
+             @EnableRedisHttpSession in RedisSessionConfig activates the transparent substitution. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- Lettuce Redis client (non-blocking) — required transport for Spring Session Data Redis -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
     </dependencies>
 
