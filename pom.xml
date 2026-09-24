@@ -26,9 +26,28 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- Health check endpoint: exposes /actuator/health for container liveness/readiness probes -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <!-- cz-java-0063 FIX: Spring Session backed by Redis (Google Cloud Memorystore on GKE Autopilot).
+             Transparently replaces in-memory HttpSession with a distributed Redis session store,
+             making sessions durable across container restarts and consistent across all pod replicas. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- cz-java-0063 FIX: Lettuce Redis client used by Spring Session to connect to
+             Google Cloud Memorystore. Connection parameters (host/port/password) are
+             injected via environment variables managed by GKE Workload Identity / Secret Manager. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
         <!-- SECURITY VIOLATION: log4j 2.14.1 has critical CVE-2021-44228 (Log4Shell) -->
         <dependency>

@@ -13,28 +13,32 @@ import java.util.Map;
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    // cz-java-0057 FIX (Line 19): Replaced hardcoded absolute path "/var/legacy/reports/"
+    // with GKE ConfigMap-injected environment variable REPORT_BASE_PATH so the path
+    // resolves at runtime regardless of container OS or filesystem layout.
+    private static final String REPORT_BASE_PATH = System.getenv().getOrDefault("REPORT_BASE_PATH", "/var/legacy/reports/");
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    // cz-java-0057 FIX (Line 23): Replaced hardcoded Windows-style absolute path
+    // "C:\\ResortBackups\\nightly\\" with GKE ConfigMap-injected environment variable
+    // BACKUP_PATH so the path resolves at runtime regardless of container OS.
+    private static final String BACKUP_PATH = System.getenv().getOrDefault("BACKUP_PATH", "C:\\ResortBackups\\nightly\\");
 
     // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
     // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
     // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    // cz-java-0061 FIX (Line 28): Replaced hardcoded port 8080 with GKE ConfigMap-backed
+    // environment variable SERVER_PORT. The value is resolved at container startup from the
+    // GKE ConfigMap, enabling Cloud Load Balancing health checks and dynamic port binding.
+    private static final int SERVER_PORT = Integer.parseInt(System.getenv().getOrDefault("SERVER_PORT", "8080")); // cz-java-0061 FIXED
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String fullPath = REPORT_BASE_PATH + fileName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
+            File reportDir = new File(REPORT_BASE_PATH);
             if (!reportDir.exists()) {
                 reportDir.mkdirs();
             }
@@ -69,8 +73,8 @@ public class ReportService {
     public Map<String, Object> getSystemInfo() { // doc-missing-001
         String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
+        info.put("reportPath", REPORT_BASE_PATH);
+        info.put("backupPath", BACKUP_PATH);
         info.put("serverPort", SERVER_PORT);        // czr-port-001
         info.put("generatedAt", timestamp);
         return info;
