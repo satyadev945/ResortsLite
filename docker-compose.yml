@@ -15,11 +15,11 @@ services:
       SPRING_PROFILES_ACTIVE: "docker"
       TZ: "UTC"
       # Database connection (override with actual values)
-      SPRING_DATASOURCE_URL: "${SPRING_DATASOURCE_URL:-jdbc:h2:mem:testdb}"
-      SPRING_DATASOURCE_USERNAME: "${SPRING_DATASOURCE_USERNAME:-sa}"
+      SPRING_DATASOURCE_URL: "${SPRING_DATASOURCE_URL:-jdbc:postgresql://db:5432/resortsdb}"
+      SPRING_DATASOURCE_USERNAME: "${SPRING_DATASOURCE_USERNAME:-postgres}"
       SPRING_DATASOURCE_PASSWORD: "${SPRING_DATASOURCE_PASSWORD:-}"
-      SPRING_DATASOURCE_DRIVER_CLASS_NAME: "${SPRING_DATASOURCE_DRIVER_CLASS_NAME:-org.h2.Driver}"
-      SPRING_JPA_DATABASE_PLATFORM: "${SPRING_JPA_DATABASE_PLATFORM:-org.hibernate.dialect.H2Dialect}"
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: "${SPRING_DATASOURCE_DRIVER_CLASS_NAME:-org.postgresql.Driver}"
+      SPRING_JPA_DATABASE_PLATFORM: "${SPRING_JPA_DATABASE_PLATFORM:-org.hibernate.dialect.PostgreSQLDialect}"
       # Application secrets (inject from secrets manager in production)
       JWT_SIGNING_SECRET: "${JWT_SIGNING_SECRET:-changeme-use-secrets-manager-in-prod}"
       # Memcached (Amazon ElastiCache)
