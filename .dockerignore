@@ -1,0 +1,59 @@
+# =============================================================================
+# .dockerignore — ResortsLite
+# Excludes build artefacts, IDE files, and wrapper scripts from the Docker
+# build context to keep the image lean and avoid accidental secret leakage.
+# =============================================================================
+
+# Maven build output
+target/
+
+# Maven wrapper (NEVER used inside Docker — system mvn is used instead)
+mvnw
+mvnw.cmd
+.mvn/
+
+# Gradle wrapper (not used in this project, but excluded for safety)
+gradlew
+gradlew.bat
+gradle/wrapper/
+.gradle/
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# IDE / editor artefacts
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+
+# OS artefacts
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+docs/
+
+# Docker files (not needed inside the image)
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# CI / CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Logs
+*.log
+logs/
+
+# Test reports
+surefire-reports/

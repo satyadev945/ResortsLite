@@ -1,0 +1,93 @@
+version: "3.9"
+
+# =============================================================================
+# docker-compose.yml — ResortsLite (application container only)
+#
+# External services (Oracle DB, ElastiCache Memcached, internal micro-services)
+# are NOT included here. Supply their connection details via environment variables
+# or a local .env file.
+# =============================================================================
+
+services:
+  resortsLite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: resortsLite:latest
+    container_name: resortsLite-app
+    ports:
+      - "8080:8080"
+    environment:
+      # -----------------------------------------------------------------------
+      # JVM settings
+      # -----------------------------------------------------------------------
+      JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UnlockExperimentalVMOptions -Djava.security.egd=file:/dev/./urandom"
+
+      # -----------------------------------------------------------------------
+      # Spring profile
+      # -----------------------------------------------------------------------
+      SPRING_PROFILES_ACTIVE: docker
+
+      # -----------------------------------------------------------------------
+      # Database (Oracle) — override with real values or use a .env file
+      # -----------------------------------------------------------------------
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:oracle:thin:@localhost:1521:ORCL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-admin}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-changeme}
+
+      # -----------------------------------------------------------------------
+      # Internal service endpoints
+      # -----------------------------------------------------------------------
+      APP_PAYMENT_ENDPOINT: ${APP_PAYMENT_ENDPOINT:-http://payment-svc:9090/charge}
+      APP_INVENTORY_ENDPOINT: ${APP_INVENTORY_ENDPOINT:-http://inventory-svc:8081/rooms}
+      APP_NOTIFICATION_ENDPOINT: ${APP_NOTIFICATION_ENDPOINT:-http://notify-svc:7070/send}
+
+      # -----------------------------------------------------------------------
+      # JWT signing secret (inject from secrets manager in production)
+      # -----------------------------------------------------------------------
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-replace-in-prod!!}
+
+      # -----------------------------------------------------------------------
+      # Amazon ElastiCache Memcached endpoint (optional — skipped if not set)
+      # -----------------------------------------------------------------------
+      MEMCACHED_ENDPOINT: ${MEMCACHED_ENDPOINT:-}
+
+      # -----------------------------------------------------------------------
+      # Cache TTL (seconds)
+      # -----------------------------------------------------------------------
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-3600}
+
+      # -----------------------------------------------------------------------
+      # ALB sticky-session duration (seconds)
+      # -----------------------------------------------------------------------
+      ALB_STICKY_DURATION_SECONDS: ${ALB_STICKY_DURATION_SECONDS:-86400}
+
+      # -----------------------------------------------------------------------
+      # EFS-backed report base path
+      # -----------------------------------------------------------------------
+      REPORT_BASE_PATH: ${REPORT_BASE_PATH:-/mnt/efs/reports}
+
+      # -----------------------------------------------------------------------
+      # Timezone
+      # -----------------------------------------------------------------------
+      TZ: UTC
+
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+    restart: unless-stopped
+
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

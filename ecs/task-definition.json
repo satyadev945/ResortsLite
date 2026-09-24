@@ -1,0 +1,90 @@
+{
+  "family": "resortsLite-task",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "resortsLite",
+      "image": "{{IMAGE_URI}}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "SPRING_PROFILES_ACTIVE",
+          "value": "docker"
+        },
+        {
+          "name": "JAVA_OPTS",
+          "value": "-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UnlockExperimentalVMOptions -Djava.security.egd=file:/dev/./urandom"
+        },
+        {
+          "name": "TZ",
+          "value": "UTC"
+        },
+        {
+          "name": "CACHE_TTL_SECONDS",
+          "value": "3600"
+        },
+        {
+          "name": "ALB_STICKY_DURATION_SECONDS",
+          "value": "86400"
+        },
+        {
+          "name": "REPORT_BASE_PATH",
+          "value": "/mnt/efs/reports"
+        },
+        {
+          "name": "APP_PAYMENT_ENDPOINT",
+          "value": "http://payment-svc.internal:9090/charge"
+        },
+        {
+          "name": "APP_INVENTORY_ENDPOINT",
+          "value": "http://inventory-svc.internal:8081/rooms"
+        },
+        {
+          "name": "APP_NOTIFICATION_ENDPOINT",
+          "value": "http://notify.internal:7070/send"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "SPRING_DATASOURCE_URL",
+          "valueFrom": "arn:aws:ssm:{{AWS_REGION}}:{{ACCOUNT_ID}}:parameter/resortsLite/prod/db/url"
+        },
+        {
+          "name": "SPRING_DATASOURCE_USERNAME",
+          "valueFrom": "arn:aws:ssm:{{AWS_REGION}}:{{ACCOUNT_ID}}:parameter/resortsLite/prod/db/username"
+        },
+        {
+          "name": "SPRING_DATASOURCE_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:{{AWS_REGION}}:{{ACCOUNT_ID}}:secret:resortsLite/prod/db/password"
+        },
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:{{AWS_REGION}}:{{ACCOUNT_ID}}:secret:resortsLite/prod/jwt/secret"
+        },
+        {
+          "name": "MEMCACHED_ENDPOINT",
+          "valueFrom": "arn:aws:ssm:{{AWS_REGION}}:{{ACCOUNT_ID}}:parameter/resortsLite/prod/memcached/endpoint"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/resortsLite",
+          "awslogs-region": "{{AWS_REGION}}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
