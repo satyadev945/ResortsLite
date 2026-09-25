@@ -1,0 +1,9 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+ResortsLite,com.demo.resortslite.entity,Doctor,0,31,0,0,0,13,0,9,0,9
+ResortsLite,com.demo.resortslite,BookingService.Season,0,60,0,4,0,12,0,6,0,4
+ResortsLite,com.demo.resortslite,BookingService.RoomType,0,92,0,8,0,17,0,9,0,5
+ResortsLite,com.demo.resortslite,BookingService,3,213,0,6,2,38,0,10,0,7
+ResortsLite,com.demo.resortslite,BookingService.LoyaltyTier,0,67,0,4,0,13,0,6,0,4
+ResortsLite,com.demo.resortslite,ResortsLiteApplication,8,0,0,0,3,0,2,0,2,0
+ResortsLite,com.demo.resortslite,BookingController,0,99,0,0,0,21,0,5,0,5
+ResortsLite,com.demo.resortslite,ReportService,12,92,1,1,3,23,1,4,0,4

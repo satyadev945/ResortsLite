@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Doctor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">ResortsLite</a> &gt; <a href="index.source.html" class="el_package">com.demo.resortslite.entity</a> &gt; <span class="el_source">Doctor.java</span></div><h1>Doctor.java</h1><pre class="source lang-java linenums">package com.demo.resortslite.entity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.SequenceGenerator;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name=&quot;JPA_DOCTOR_INFO&quot;)
+<span class="fc" id="L13">public class Doctor {</span>
+
+	@Column(name=&quot;DOC_ID&quot;)
+	@Id
+	//@GeneratedValue(strategy=GenerationType.AUTO)
+	@SequenceGenerator(name=&quot;gen1&quot;,sequenceName=&quot;CNO_SEQ&quot;,initialValue = 203,allocationSize = 1)
+	@GeneratedValue(generator =&quot;gen1&quot;,strategy = GenerationType.SEQUENCE)
+	private Integer docId;
+
+	@Column(name=&quot;DOC_NAME&quot;,length=25)
+	private String docName;
+
+	@Column(name=&quot;SPECIALIZATION&quot;,length=20)
+	private String specialization;
+
+	@Column(name=&quot;INCOME&quot;)
+	private Double income;
+
+	public Integer getDocId() {
+<span class="fc" id="L32">		return docId;</span>
+	}
+
+	public void setDocId(Integer docId) {
+<span class="fc" id="L36">		this.docId = docId;</span>
+<span class="fc" id="L37">	}</span>
+
+	public String getDocName() {
+<span class="fc" id="L40">		return docName;</span>
+	}
+
+	public void setDocName(String docName) {
+<span class="fc" id="L44">		this.docName = docName;</span>
+<span class="fc" id="L45">	}</span>
+
+	public String getSpecialization() {
+<span class="fc" id="L48">		return specialization;</span>
+	}
+
+	public void setSpecialization(String specialization) {
+<span class="fc" id="L52">		this.specialization = specialization;</span>
+<span class="fc" id="L53">	}</span>
+
+	public Double getIncome() {
+<span class="fc" id="L56">		return income;</span>
+	}
+
+	public void setIncome(Double income) {
+<span class="fc" id="L60">		this.income = income;</span>
+<span class="fc" id="L61">	}</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>
