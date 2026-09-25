@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookingService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">ResortsLite</a> &gt; <a href="index.source.html" class="el_package">com.demo.resortslite</a> &gt; <span class="el_source">BookingService.java</span></div><h1>BookingService.java</h1><pre class="source lang-java linenums">package com.demo.resortslite;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.security.MessageDigest;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+@Service
+<span class="fc" id="L14">public class BookingService {</span>
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    // Fix cr-java-0021 / sec-cred-001: Hardcoded DB credentials removed.
+    // DB connection is managed by Spring DataSource (application.properties / env vars).
+    // DB_HOST, DB_USER, DB_PASS constants eliminated — never store credentials in source code.
+
+    // Fix cr-java-0021 / cr-java-0088: Hardcoded internal IP/HTTP endpoint externalised.
+    // Injected from environment variable via application.properties (app.payment.endpoint).
+    @Value(&quot;${app.payment.endpoint:https://payment-svc/charge}&quot;)
+    private String paymentApi;
+
+    public Map&lt;String, Object&gt; createBooking(String guestName, String roomType,
+                                              String checkIn, String checkOut) {
+<span class="fc" id="L30">        String bookingId = &quot;BK-&quot; + UUID.randomUUID().toString().substring(0, 8).toUpperCase();</span>
+
+        // Fix sql-inject-001 [Security Health / Critical]: SQL injection via string
+        // concatenation replaced with parameterised query using JdbcTemplate '?' placeholders.
+        // PostgreSQL-compatible INSERT with positional parameters.
+<span class="fc" id="L35">        String sql = &quot;INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)&quot;;</span>
+<span class="fc" id="L36">        jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut);</span>
+
+        // SHA-256 used for confirmation code generation (non-password hashing context).
+<span class="fc" id="L39">        String confirmCode = sha256Hash(bookingId + guestName);</span>
+
+<span class="fc" id="L41">        Map&lt;String, Object&gt; booking = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L42">        booking.put(&quot;bookingId&quot;, bookingId);</span>
+<span class="fc" id="L43">        booking.put(&quot;guestName&quot;, guestName);</span>
+<span class="fc" id="L44">        booking.put(&quot;roomType&quot;, roomType);</span>
+<span class="fc" id="L45">        booking.put(&quot;checkIn&quot;, checkIn);</span>
+<span class="fc" id="L46">        booking.put(&quot;checkOut&quot;, checkOut);</span>
+<span class="fc" id="L47">        booking.put(&quot;confirmationCode&quot;, confirmCode);</span>
+        // Fix cr-java-0021: dbHost no longer exposed in response — connection details are internal.
+<span class="fc" id="L49">        return booking;</span>
+    }
+
+    public Map&lt;String, Object&gt; getBookingById(String bookingId) {
+        // Fix sql-inject-001 [Security Health / Critical]: SQL injection via string
+        // concatenation replaced with parameterised query using JdbcTemplate '?' placeholder.
+        // PostgreSQL-compatible SELECT with positional parameter.
+<span class="fc" id="L56">        String sql = &quot;SELECT * FROM bookings WHERE id = ?&quot;;</span>
+<span class="fc" id="L57">        Map&lt;String, Object&gt; result = new HashMap&lt;&gt;();</span>
+        try {
+<span class="fc" id="L59">            result = jdbcTemplate.queryForMap(sql, bookingId);</span>
+<span class="fc" id="L60">        } catch (Exception e) {</span>
+<span class="fc" id="L61">            result.put(&quot;error&quot;, &quot;Booking not found: &quot; + bookingId);</span>
+<span class="fc" id="L62">        }</span>
+<span class="fc" id="L63">        return result;</span>
+    }
+
+    // Refactored: Reduced cyclomatic complexity by extracting room base price and
+    // discount multiplier lookups into helper methods (Code Sustainability improvement).
+    public String calculateRoomPrice(String roomType, int nights, String season, String loyalty) {
+<span class="fc" id="L69">        double basePrice = getRoomBasePrice(roomType);</span>
+<span class="fc" id="L70">        basePrice = applySeasonMultiplier(basePrice, season);</span>
+<span class="fc" id="L71">        basePrice = applyLoyaltyDiscount(basePrice, loyalty);</span>
+        // Apply long-stay discount — 14+ nights takes priority over 7+ nights
+<span class="fc bfc" id="L73" title="All 2 branches covered.">        if (nights &gt;= 14) {</span>
+<span class="fc" id="L74">            basePrice = basePrice * 0.90;</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        } else if (nights &gt;= 7) {</span>
+<span class="fc" id="L76">            basePrice = basePrice * 0.95;</span>
+        }
+<span class="fc" id="L78">        double total = basePrice * nights;</span>
+<span class="fc" id="L79">        return String.format(&quot;%.2f&quot;, total);</span>
+    }
+
+    // Fix dup-logic-001 [Code Sustainability]: Room type validation extracted to a single
+    // shared helper, eliminating duplication between calculateRoomPrice and isRoomAvailable.
+    private boolean isValidRoomType(String roomType) {
+<span class="fc bfc" id="L85" title="All 2 branches covered.">        return roomType != null &amp;&amp; (</span>
+<span class="fc bfc" id="L86" title="All 2 branches covered.">                roomType.equals(&quot;STANDARD&quot;) ||</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">                roomType.equals(&quot;DELUXE&quot;) ||</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">                roomType.equals(&quot;SUITE&quot;) ||</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">                roomType.equals(&quot;VILLA&quot;)</span>
+        );
+    }
+
+    private double getRoomBasePrice(String roomType) {
+<span class="fc bfc" id="L94" title="All 5 branches covered.">        return switch (roomType) {</span>
+<span class="fc" id="L95">            case &quot;STANDARD&quot; -&gt; 120.0;</span>
+<span class="fc" id="L96">            case &quot;DELUXE&quot;   -&gt; 200.0;</span>
+<span class="fc" id="L97">            case &quot;SUITE&quot;    -&gt; 350.0;</span>
+<span class="fc" id="L98">            case &quot;VILLA&quot;    -&gt; 600.0;</span>
+<span class="fc" id="L99">            default         -&gt; 120.0;</span>
+        };
+    }
+
+    private double applySeasonMultiplier(double price, String season) {
+<span class="fc bfc" id="L104" title="All 3 branches covered.">        return switch (season) {</span>
+<span class="fc" id="L105">            case &quot;PEAK&quot; -&gt; price * 1.5;</span>
+<span class="fc" id="L106">            case &quot;OFF&quot;  -&gt; price * 0.8;</span>
+<span class="fc" id="L107">            default     -&gt; price;</span>
+        };
+    }
+
+    private double applyLoyaltyDiscount(double price, String loyalty) {
+<span class="fc bfc" id="L112" title="All 4 branches covered.">        return switch (loyalty) {</span>
+<span class="fc" id="L113">            case &quot;GOLD&quot;     -&gt; price * 0.9;</span>
+<span class="fc" id="L114">            case &quot;PLATINUM&quot; -&gt; price * 0.8;</span>
+<span class="fc" id="L115">            case &quot;DIAMOND&quot;  -&gt; price * 0.7;</span>
+<span class="fc" id="L116">            default         -&gt; price;</span>
+        };
+    }
+
+    public boolean isRoomAvailable(String roomType) {
+        // Fix dup-logic-001: Delegating to shared isValidRoomType helper.
+<span class="fc" id="L122">        return isValidRoomType(roomType);</span>
+    }
+
+    public String generateReport(String month) {
+        // Fix cr-java-0021 / cr-java-0088: paymentApi injected from env var — no hardcoded IP.
+<span class="fc" id="L127">        return &quot;Report generation triggered for: &quot; + month + &quot; via &quot; + paymentApi;</span>
+    }
+
+    // SHA-256 for confirmation code generation (non-password hashing context).
+    private String sha256Hash(String input) {
+        try {
+<span class="fc" id="L133">            MessageDigest md = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="fc" id="L134">            byte[] hash = md.digest(input.getBytes());</span>
+<span class="fc" id="L135">            StringBuilder sb = new StringBuilder();</span>
+<span class="fc bfc" id="L136" title="All 2 branches covered.">            for (byte b : hash) { sb.append(String.format(&quot;%02x&quot;, b)); }</span>
+<span class="fc" id="L137">            return sb.toString();</span>
+<span class="nc" id="L138">        } catch (Exception e) {</span>
+<span class="nc" id="L139">            return input;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>
