@@ -1,5 +1,6 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -14,19 +15,28 @@ import java.util.Map;
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    // Fix czr-java-001 [Software Portability]: Hardcoded absolute path /var/legacy/reports
+    // replaced with environment-variable-backed property. Set APP_REPORT_BASE_PATH to an
+    // S3 path, Azure Blob path, or mounted volume path in container/cloud environments.
+    @Value("${app.report.base-path:/tmp/reports/}")
+    private String reportBasePath;
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    // Fix czr-java-001: Windows-style hardcoded backup path C:\\ResortBackups\\nightly\\
+    // replaced with environment-variable-backed property. Set APP_BACKUP_PATH in the
+    // container task definition or Kubernetes Secret/ConfigMap.
+    @Value("${app.backup.path:/tmp/backups/}")
+    private String backupPath;
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    // Fix czr-port-001 [Software Portability]: Hardcoded SERVER_PORT constant removed.
+    // Port is now read from the environment via ${PORT:8080} in application.properties
+    // and injected here for any logic that needs to reference it.
+    @Value("${server.port:8080}")
+    private int serverPort;
+
+    // Fix cr-java-0088: Report download base URL externalised to environment variable.
+    // Set APP_REPORT_DOWNLOAD_URL in AWS Parameter Store / ECS task definition.
+    @Value("${app.report.download-url:https://reports.resorts-internal.com/download}")
+    private String reportDownloadBaseUrl;
 
     /**
      * Generates a monthly booking report as a CSV file.
@@ -37,17 +47,18 @@ public class ReportService {
      */
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        // Fix czr-java-001: reportBasePath is now injected from env var — no hardcoded path.
+        String fullPath = reportBasePath + fileName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
+            File reportDir = new File(reportBasePath);
             if (!reportDir.exists()) {
                 reportDir.mkdirs();
             }
 
-            // Updated: try-with-resources for proper resource management (Java 7+ best practice)
+            // try-with-resources for proper resource management (Java 7+ best practice)
             try (FileWriter writer = new FileWriter(fullPath)) {
                 writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
                 writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
@@ -56,7 +67,8 @@ public class ReportService {
 
             result.put("status", "generated");
             result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT); // czr-port-001
+            // Fix czr-port-001: serverPort now injected from env var, not a hardcoded constant.
+            result.put("serverPort", serverPort);
 
         } catch (IOException e) {
             result.put("status", "error");
@@ -73,9 +85,10 @@ public class ReportService {
      * @return the full download URL string
      */
     public String buildReportDownloadUrl(String reportName) {
-        // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP URL
-        // hardcoded for report download. Cloud security standards enforce HTTPS.
-        return "http://reports.resorts-internal.com:8080/download/" + reportName; // cr-java-0088
+        // Fix cr-java-0088 [Cloud Compatibility]: Plain HTTP URL replaced with HTTPS endpoint
+        // injected from environment variable (app.report.download-url). Cloud security
+        // standards (AWS WAF, ALB) enforce HTTPS — plain HTTP calls are blocked or flagged.
+        return reportDownloadBaseUrl + "/" + reportName;
     }
 
     /**
@@ -84,12 +97,14 @@ public class ReportService {
      * @return a map of system metadata
      */
     public Map<String, Object> getSystemInfo() {
-        // Updated: Replaced legacy java.util.Date + SimpleDateFormat with java.time API (JAVA8_TO_21_DATE_TIME_CHANGES)
+        // Updated: Replaced legacy java.util.Date + SimpleDateFormat with java.time API
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
-        info.put("serverPort", SERVER_PORT);        // czr-port-001
+        // Fix czr-java-001: paths now come from injected env-var-backed properties.
+        info.put("reportPath", reportBasePath);
+        info.put("backupPath", backupPath);
+        // Fix czr-port-001: port now injected from env var.
+        info.put("serverPort", serverPort);
         info.put("generatedAt", timestamp);
         return info;
     }
