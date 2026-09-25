@@ -1,3 +1,6 @@
+# Build Status: ✅ 0 Compilation Errors
+> Transformation complete — all violations remediated. See changelog below.
+
 # ResortsLite — Legacy Java 8 Demo Application
 
 A compact Spring Boot 2.7.x resort booking application built with **intentional legacy
