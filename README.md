@@ -1,7 +1,6 @@
-# ResortsLite — Legacy Java 8 Demo Application
+# ResortsLite — Modernized Java 17 Demo Application
 
-A compact Spring Boot 2.7.x resort booking application built with **intentional legacy
-patterns** across all four COMPASS assessment domains.
+A compact Spring Boot 3.2.x resort booking application modernized from legacy patterns.
 
 **Purpose:** Hands-on Concierto Modernize demo — scan, assess, and transform.
 
@@ -11,9 +10,9 @@ patterns** across all four COMPASS assessment domains.
 
 | Item | Version |
 |---|---|
-| Java | 1.8 |
-| Spring Boot | 2.7.18 |
-| Spring MVC | 5.3.x |
+| Java | 17 |
+| Spring Boot | 3.2.0 |
+| Spring MVC | 6.x |
 | Build | Maven |
 | Database | H2 in-memory |
 
