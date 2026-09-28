@@ -2,6 +2,7 @@ package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
@@ -25,7 +26,10 @@ public class BookingService {
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+    // FIXED cz-java-0062: Replaced hardcoded IP address with environment variable for GKE Service DNS
+    // Use Kubernetes Service DNS name for in-cluster communication (e.g., payment-service.default.svc.cluster.local)
+    @Value("${PAYMENT_API_URL:http://payment-service:9090/payments/charge}")
+    private String PAYMENT_API; // cr-java-0021, cr-java-0088
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
