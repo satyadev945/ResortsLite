@@ -1,78 +1,134 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    private static final Logger logger = LoggerFactory.getLogger(ReportService.class);
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    // IMPROVED: Externalized paths to configuration for container compatibility
+    // Default uses /tmp for container-friendly path
+    @Value("${app.report.path:/tmp/reports/}")
+    private String reportBasePath;
+    
+    @Value("${app.backup.path:/tmp/backups/}")
+    private String backupPath;
+    
+    // IMPROVED: Externalized server port to configuration
+    // Allows dynamic port assignment in container environments
+    @Value("${server.port:8080}")
+    private int serverPort;
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
-
+    /**
+     * Generates a monthly report for the specified month and year.
+     * @param month the month for the report
+     * @param year the year for the report
+     * @return a map containing the report generation status and details
+     */
     public Map<String, Object> generateMonthlyReport(String month, String year) {
+        // IMPROVED: Input validation
+        if (month == null || month.trim().isEmpty() || year == null || year.trim().isEmpty()) {
+            logger.error("Invalid month or year provided: month={}, year={}", month, year);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", "Month and year cannot be null or empty");
+            return error;
+        }
+
+        logger.info("Generating monthly report for: {}/{}", month, year);
+
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String fullPath = reportBasePath + fileName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
+            File reportDir = new File(reportBasePath);
             if (!reportDir.exists()) {
-                reportDir.mkdirs();
+                boolean created = reportDir.mkdirs();
+                if (!created) {
+                    logger.error("Failed to create report directory: {}", reportBasePath);
+                    result.put("status", "error");
+                    result.put("message", "Failed to create report directory");
+                    return result;
+                }
+                logger.info("Created report directory: {}", reportBasePath);
             }
 
-            FileWriter writer = new FileWriter(fullPath);
-            writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
-            writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
-            writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
-            writer.close();
+            try (FileWriter writer = new FileWriter(fullPath)) {
+                writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
+                writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
+                writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
+            }
 
             result.put("status", "generated");
             result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT); // czr-port-001
+            result.put("serverPort", serverPort);
+            logger.info("Report generated successfully: {}", fullPath);
 
         } catch (IOException e) {
+            logger.error("Failed to generate report for {}/{}", month, year, e);
             result.put("status", "error");
-            result.put("message", e.getMessage());
+            result.put("message", "IO error: " + e.getMessage());
+        } catch (Exception e) {
+            logger.error("Unexpected error generating report for {}/{}", month, year, e);
+            result.put("status", "error");
+            result.put("message", "Unexpected error: " + e.getMessage());
         }
 
         return result;
     }
 
-    // VIOLATION [Code Sustainability / Medium]: No JavaDoc or method documentation.
-    // Missing documentation is flagged across all public methods in the codebase.
-    // This increases onboarding time and transformation risk for automated tools.
-    public String buildReportDownloadUrl(String reportName) { // doc-missing-001
-        // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP URL
-        // hardcoded for report download. Cloud security standards enforce HTTPS.
-        return "http://reports.resorts-internal.com:8080/download/" + reportName; // cr-java-0088
+    /**
+     * Builds a download URL for the specified report.
+     * @param reportName the name of the report
+     * @return the download URL
+     */
+    public String buildReportDownloadUrl(String reportName) {
+        // IMPROVED: Input validation
+        if (reportName == null || reportName.trim().isEmpty()) {
+            logger.error("Invalid report name provided: {}", reportName);
+            return "";
+        }
+
+        // IMPROVED: Using HTTPS for cloud compatibility
+        // In production, this should be externalized to configuration
+        // Example: @Value("${app.report.download.baseurl}")
+        String url = "https://reports.resorts-internal.com:" + serverPort + "/download/" + reportName;
+        logger.debug("Generated download URL: {}", url);
+        return url;
     }
 
-    public Map<String, Object> getSystemInfo() { // doc-missing-001
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+    /**
+     * Retrieves system information including paths and timestamps.
+     * @return a map containing system information
+     */
+    public Map<String, Object> getSystemInfo() {
+        logger.debug("Retrieving system information");
+        
+        // FIXED: Using java.time API instead of legacy Date/SimpleDateFormat
+        String timestamp = LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
-        info.put("serverPort", SERVER_PORT);        // czr-port-001
+        info.put("reportPath", reportBasePath);
+        info.put("backupPath", backupPath);
+        info.put("serverPort", serverPort);
         info.put("generatedAt", timestamp);
+        
+        logger.debug("System info retrieved: {}", info);
         return info;
     }
 }
