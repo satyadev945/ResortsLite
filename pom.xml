@@ -19,9 +19,69 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <azure.storage.version>12.25.1</azure.storage.version>
+        <azure.keyvault.version>4.8.7</azure.keyvault.version>
+        <azure.identity.version>1.13.3</azure.identity.version>
+        <!-- cr-java-0090 FIX: Spring Cloud Azure version for Azure AD / Entra ID integration -->
+        <spring-cloud-azure.version>4.19.0</spring-cloud-azure.version>
+        <!-- cr-java-0065 FIX: Spring Session Data Redis version aligned with Spring Boot 2.7.x BOM -->
+        <spring-session-bom.version>2021.2.3</spring-session-bom.version>
+        <!-- cr-java-0111 FIX: Azure Service Bus SDK version for scheduled message delivery -->
+        <azure.servicebus.version>7.15.1</azure.servicebus.version>
     </properties>
 
     <dependencies>
+        <!-- Azure Blob Storage SDK for cloud-native file storage (replaces hard-coded file paths) -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <!-- cr-java-0069 FIX: Azure Key Vault Secrets SDK for secure credential retrieval -->
+            <artifactId>azure-security-keyvault-secrets</artifactId>
+            <version>${azure.keyvault.version}</version>
+        </dependency>
+        <!-- cr-java-0090 FIX: Spring Cloud Azure Active Directory (Entra ID) starter.
+             Provides Azure AD OAuth2 / OIDC integration with Spring Security, replacing
+             local file-based credential storage with centralized identity management.
+             Supports both web application (authorization-code) and resource-server
+             (JWT bearer token) flows backed by Microsoft Authentication Library (MSAL). -->
+        <dependency>
+            <groupId>com.azure.spring</groupId>
+            <artifactId>spring-cloud-azure-starter-active-directory</artifactId>
+            <version>${spring-cloud-azure.version}</version>
+        </dependency>
+        <!-- cr-java-0090 FIX: Spring Boot Security starter — required by Spring Cloud Azure AD
+             to activate the Spring Security filter chain and OAuth2 resource-server support. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <!-- cr-java-0090 FIX: Spring Security OAuth2 Resource Server — validates Azure AD
+             JWT bearer tokens on every incoming request, ensuring only authenticated
+             principals with valid Entra ID tokens can access protected endpoints. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+        <dependency>
+            <!-- cr-java-0069 FIX: Azure Identity SDK providing DefaultAzureCredential -->
+            <groupId>com.azure</groupId>
+            <artifactId>azure-identity</artifactId>
+            <version>${azure.identity.version}</version>
+        </dependency>
+        <!-- cr-java-0111 FIX: Azure Service Bus SDK — replaces java.util.Timer and server-local
+             scheduling with Azure Service Bus scheduled message delivery for distributed,
+             timezone-agnostic task execution across cloud instances.
+             Scheduled messages use UTC OffsetDateTime, eliminating server-local timezone
+             inconsistencies across multi-region deployments and container restarts. -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-messaging-servicebus</artifactId>
+            <version>${azure.servicebus.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-blob</artifactId>
+            <version>${azure.storage.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -29,6 +89,21 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Session Data Redis — externalizes HTTP session state to
+             Azure Cache for Redis, enabling stateless horizontal scaling across all instances.
+             The @EnableRedisHttpSession annotation in BookingController activates this store.
+             Configure via SPRING_REDIS_HOST / SPRING_REDIS_PORT / SPRING_REDIS_PASSWORD /
+             SPRING_REDIS_SSL environment variables pointing to your Azure Cache for Redis instance. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Boot Redis starter — provides Lettuce Redis client and
+             auto-configuration for connecting to Azure Cache for Redis over TLS (port 6380). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
         <!-- SECURITY VIOLATION: log4j 2.14.1 has critical CVE-2021-44228 (Log4Shell) -->
         <dependency>
