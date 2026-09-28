@@ -17,15 +17,15 @@ services:
       # JVM Configuration
       - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       
-      # Database Configuration (externalized - connect to external Oracle DB)
+      # Database Configuration (externalized - connect to external PostgreSQL DB)
       # Replace these with your actual database connection details
-      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@${DB_HOST:-db-prod.resorts-internal.com}:${DB_PORT:-1521}:${DB_SID:-ORCL}
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://${DB_HOST:-db-prod.resorts-internal.com}:${DB_PORT:-5432}/${DB_NAME:-orcl}
       - SPRING_DATASOURCE_USERNAME=${DB_USERNAME:-admin}
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-Resort$$Pass#2019!}
-      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=oracle.jdbc.OracleDriver
-      
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
+
       # JPA/Hibernate Configuration
-      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.Oracle12cDialect
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.PostgreSQLDialect
       - SPRING_JPA_SHOW_SQL=false
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       
