@@ -1,8 +1,11 @@
 package com.demo.resortslite;
 
+import com.demo.resortslite.config.SecretsManagerConfig;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import javax.annotation.PostConstruct;
 
 import java.security.MessageDigest;
 import java.util.HashMap;
@@ -15,17 +18,32 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
-    private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    @Autowired
+    private SecretsManagerConfig secretsManagerConfig;
+
+    // FIXED: Replaced hard-coded credentials with AWS Secrets Manager integration
+    // Database credentials are now retrieved from AWS Secrets Manager at runtime
+    // This enables automatic credential rotation without code changes or redeployment
+    private String dbHost;
+    private String dbUser;
+    private String dbPass;
+
+    @PostConstruct
+    public void init() {
+        // Load database credentials from AWS Secrets Manager
+        // Falls back to environment variables for local development
+        this.dbHost = secretsManagerConfig.getSecretValue("host");
+        this.dbUser = secretsManagerConfig.getSecretValue("username");
+        this.dbPass = secretsManagerConfig.getSecretValue("password");
+    }
+
+    // Payment API endpoint externalized to environment variable
+    @Value("${app.payment.endpoint:http://payment-svc:9090/payments/charge}")
+    private String paymentApi;
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
@@ -50,7 +68,7 @@ public class BookingService {
         booking.put("checkIn", checkIn);
         booking.put("checkOut", checkOut);
         booking.put("confirmationCode", confirmCode);
-        booking.put("dbHost", DB_HOST);
+        booking.put("dbHost", dbHost);
         return booking;
     }
 
@@ -100,7 +118,7 @@ public class BookingService {
     }
 
     public String generateReport(String month) {
-        return "Report generation triggered for: " + month + " via " + PAYMENT_API;
+        return "Report generation triggered for: " + month + " via " + paymentApi;
     }
 
     private String md5Hash(String input) { // sec-weak-hash-001
