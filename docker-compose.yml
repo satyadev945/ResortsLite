@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  resortslite-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: resortslite:latest
+    container_name: resortslite-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Application Configuration
+      - SERVER_PORT=8080
+      - SPRING_PROFILES_ACTIVE=docker
+      
+      # JVM Configuration
+      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
+      
+      # Database Configuration (externalized - connect to external Oracle DB)
+      # Replace these with your actual database connection details
+      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@${DB_HOST:-db-prod.resorts-internal.com}:${DB_PORT:-1521}:${DB_SID:-ORCL}
+      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME:-admin}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-Resort$$Pass#2019!}
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=oracle.jdbc.OracleDriver
+      
+      # JPA/Hibernate Configuration
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.Oracle12cDialect
+      - SPRING_JPA_SHOW_SQL=false
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      
+      # External Service Endpoints (replace with actual endpoints)
+      - APP_PAYMENT_ENDPOINT=${PAYMENT_ENDPOINT:-http://payment-svc.internal:9090/charge}
+      - APP_INVENTORY_ENDPOINT=${INVENTORY_ENDPOINT:-http://inventory-svc.internal:8081/rooms}
+      - APP_NOTIFICATION_ENDPOINT=${NOTIFICATION_ENDPOINT:-http://notify.internal:7070/send}
+      
+      # File Storage Paths (mounted to volumes)
+      - REPORT_PATH=/mnt/efs/reports
+      - BACKUP_PATH=/mnt/efs/backups
+      
+      # JWT Configuration (use secure secret in production)
+      - JWT_SECRET=${JWT_SECRET:-default-secret-key-for-development-only-min-256-bits-required-for-hs256-algorithm}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
+      
+      # AWS ElastiCache Memcached Configuration
+      - MEMCACHED_ENDPOINT=${MEMCACHED_ENDPOINT:-localhost:11211}
+      - MEMCACHED_EXPIRATION=${MEMCACHED_EXPIRATION:-3600}
+      
+      # Actuator Configuration
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=when-authorized
+    
+    volumes:
+      # Mount local directories for reports and backups
+      # In ECS Fargate, these will be EFS volumes
+      - ./data/reports:/mnt/efs/reports
+      - ./data/backups:/mnt/efs/backups
+      - ./logs:/app/logs
+    
+    networks:
+      - resortslite-network
+    
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    restart: unless-stopped
+    
+    # Resource limits (adjust based on your requirements)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+networks:
+  resortslite-network:
+    driver: bridge
+
+# Note: This docker-compose.yml is for local development only
+# Database, Memcached, and other infrastructure services should be provided externally
+# For production deployment to AWS ECS Fargate, use the ECS task and service definitions

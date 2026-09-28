@@ -1,0 +1,118 @@
+{
+  "family": "resortslite-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "resortslite",
+      "image": "{{IMAGE_URI}}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "SERVER_PORT",
+          "value": "8080"
+        },
+        {
+          "name": "SPRING_PROFILES_ACTIVE",
+          "value": "docker"
+        },
+        {
+          "name": "JAVA_OPTS",
+          "value": "-Xmx512m -Xms256m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+        },
+        {
+          "name": "SPRING_DATASOURCE_URL",
+          "value": "{{DB_URL}}"
+        },
+        {
+          "name": "SPRING_DATASOURCE_USERNAME",
+          "value": "{{DB_USERNAME}}"
+        },
+        {
+          "name": "SPRING_DATASOURCE_PASSWORD",
+          "value": "{{DB_PASSWORD}}"
+        },
+        {
+          "name": "SPRING_DATASOURCE_DRIVER_CLASS_NAME",
+          "value": "oracle.jdbc.OracleDriver"
+        },
+        {
+          "name": "SPRING_JPA_DATABASE_PLATFORM",
+          "value": "org.hibernate.dialect.Oracle12cDialect"
+        },
+        {
+          "name": "SPRING_JPA_SHOW_SQL",
+          "value": "false"
+        },
+        {
+          "name": "SPRING_JPA_HIBERNATE_DDL_AUTO",
+          "value": "update"
+        },
+        {
+          "name": "APP_PAYMENT_ENDPOINT",
+          "value": "{{PAYMENT_ENDPOINT}}"
+        },
+        {
+          "name": "APP_INVENTORY_ENDPOINT",
+          "value": "{{INVENTORY_ENDPOINT}}"
+        },
+        {
+          "name": "APP_NOTIFICATION_ENDPOINT",
+          "value": "{{NOTIFICATION_ENDPOINT}}"
+        },
+        {
+          "name": "REPORT_PATH",
+          "value": "/mnt/efs/reports"
+        },
+        {
+          "name": "BACKUP_PATH",
+          "value": "/mnt/efs/backups"
+        },
+        {
+          "name": "JWT_SECRET",
+          "value": "{{JWT_SECRET}}"
+        },
+        {
+          "name": "JWT_EXPIRATION",
+          "value": "3600000"
+        },
+        {
+          "name": "MEMCACHED_ENDPOINT",
+          "value": "{{MEMCACHED_ENDPOINT}}"
+        },
+        {
+          "name": "MEMCACHED_EXPIRATION",
+          "value": "3600"
+        },
+        {
+          "name": "MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE",
+          "value": "health,info"
+        },
+        {
+          "name": "MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS",
+          "value": "when-authorized"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/resortslite",
+          "awslogs-region": "{{AWS_REGION}}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
