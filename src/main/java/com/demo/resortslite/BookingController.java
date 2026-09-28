@@ -1,11 +1,15 @@
 package com.demo.resortslite;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import com.demo.resortslite.service.AzureAdAuthenticationService;
 
-import javax.servlet.http.HttpSession;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/bookings")
@@ -14,27 +18,57 @@ public class BookingController {
     @Autowired
     private BookingService bookingService;
 
-    // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
-    // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    // FIXED cr-java-0065: Replaced HttpSession with Redis-backed session storage
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+    
+    // FIXED cr-java-0090: Azure AD authentication service for centralized identity management
+    @Autowired
+    private AzureAdAuthenticationService azureAdAuthService;
 
+    // FIXED cr-java-0071: Externalized inventory service URL to Azure App Configuration
+    @Value("${app.inventory.endpoint}")
+    private String inventoryServiceUrl;
+
+
+    /**
+     * Create a new booking
+     * FIXED cr-java-0065: Session state now stored in Azure Cache for Redis instead of local HTTP session
+     * This enables horizontal scaling and stateless architecture
+     * FIXED cr-java-0090: Endpoint now requires Azure AD authentication
+     */
     @PostMapping("/create")
+    @PreAuthorize("isAuthenticated()")
     public Map<String, Object> createBooking(
             @RequestParam String guestName,
             @RequestParam String roomType,
             @RequestParam String checkIn,
             @RequestParam String checkOut,
-            HttpSession session) {
+            @RequestParam(required = false) String sessionId) {
 
         Map<String, Object> booking = bookingService.createBooking(guestName, roomType, checkIn, checkOut);
+        
+        // FIXED cr-java-0090: Add authenticated user information from Azure AD
+        Map<String, String> userInfo = azureAdAuthService.getAuthenticatedUserInfo();
+        booking.put("authenticatedUser", userInfo.get("email"));
+        booking.put("authenticatedUserId", userInfo.get("userId"));
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Booking state stored in
-        // HTTP session memory. AWS ALB distributes requests across EC2 instances — session
-        // data on instance A is invisible to instance B. Auto-scaling and failover breaks.
-        session.setAttribute("lastBooking", booking); // cr-java-0065
-        session.setAttribute("guestName", guestName); // cr-java-0065
+        // FIXED cr-java-0065: Store booking state in Azure Cache for Redis instead of HTTP session
+        // Redis-backed storage enables session sharing across multiple instances
+        String bookingId = (String) booking.get("bookingId");
+        if (sessionId != null && !sessionId.isEmpty()) {
+            String sessionKey = "session:" + sessionId;
+            redisTemplate.opsForHash().put(sessionKey, "lastBooking", booking);
+            redisTemplate.opsForHash().put(sessionKey, "guestName", guestName);
+            // Set session expiration to 30 minutes
+            redisTemplate.expire(sessionKey, 30, TimeUnit.MINUTES);
+        }
 
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        // FIXED cr-java-0067: Replaced in-memory cache with Azure Cache for Redis with TTL
+        // This enables distributed caching across instances and prevents memory exhaustion
+        String cacheKey = "booking:cache:" + bookingId;
+        redisTemplate.opsForValue().set(cacheKey, booking);
+        redisTemplate.expire(cacheKey, 60, TimeUnit.MINUTES); // 60 minutes TTL for booking cache
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -42,14 +76,28 @@ public class BookingController {
         return response;
     }
 
+    /**
+     * Get booking status
+     * FIXED cr-java-0065: Retrieve session data from Azure Cache for Redis instead of local HTTP session
+     * This ensures session data is available across all instances in the cluster
+     * FIXED cr-java-0090: Endpoint now requires Azure AD authentication
+     */
     @GetMapping("/status/{bookingId}")
+    @PreAuthorize("isAuthenticated()")
     public Map<String, Object> getBookingStatus(
             @PathVariable String bookingId,
-            HttpSession session) {
+            @RequestParam(required = false) String sessionId) {
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Reading business state
-        // from HTTP session — will return null on any other instance in the cluster.
-        String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065
+        // FIXED cr-java-0065: Read session data from Azure Cache for Redis
+        // Session data is now shared across all instances, preventing null values on different instances
+        String lastGuest = null;
+        if (sessionId != null && !sessionId.isEmpty()) {
+            String sessionKey = "session:" + sessionId;
+            Object guestObj = redisTemplate.opsForHash().get(sessionKey, "guestName");
+            if (guestObj != null) {
+                lastGuest = guestObj.toString();
+            }
+        }
 
         Map<String, Object> result = new HashMap<>();
         result.put("bookingId", bookingId);
@@ -60,10 +108,9 @@ public class BookingController {
 
     @GetMapping("/availability")
     public Map<String, Object> checkAvailability(@RequestParam String roomType) {
-        // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP call to
-        // internal inventory service. AWS ALB, WAF, and Well-Architected security review
-        // enforce HTTPS. This call will be blocked or flagged in a cloud-native setup.
-        String inventoryUrl = "http://inventory-service.internal:8081/rooms/available"; // cr-java-0088
+        // FIXED cr-java-0071: Using externalized configuration from Azure App Configuration
+        // Previously hard-coded: "http://inventory-service.internal:8081/rooms/available"
+        String inventoryUrl = inventoryServiceUrl + "/available";
 
         Map<String, Object> response = new HashMap<>();
         response.put("roomType", roomType);
