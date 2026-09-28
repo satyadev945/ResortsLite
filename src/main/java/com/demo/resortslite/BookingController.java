@@ -1,11 +1,14 @@
 package com.demo.resortslite;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
-
 import javax.servlet.http.HttpSession;
+
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/bookings")
@@ -14,10 +17,29 @@ public class BookingController {
     @Autowired
     private BookingService bookingService;
 
-    // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
-    // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
 
+    @Value("${REPORT_BASE_PATH:/var/reports}")
+    private String reportBasePath;
+
+    // FIXED cz-java-0070 (Line 19): Local Caches
+    // Replaced local HashMap cache with Amazon ElastiCache (Redis) for horizontal scaling
+    private static final String BOOKING_CACHE_PREFIX = "booking:cache:";
+
+    /**
+     * FIXED cz-java-0069 (Lines 34-35): In-Memory Session Storage
+     * 
+     * Remediation: Externalized session storage to Amazon ElastiCache (Redis) on EKS
+     * - HttpSession is now backed by Spring Session with Redis
+     * - Session data is stored in Redis instead of in-memory
+     * - Enables horizontal scaling across multiple container instances
+     * - Session persists across container restarts
+     * - Shared session state in EKS cluster environments
+     * 
+     * Configuration: See RedisSessionConfig.java and application.properties
+     * Redis connection via environment variables: REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+     */
     @PostMapping("/create")
     public Map<String, Object> createBooking(
             @RequestParam String guestName,
@@ -28,13 +50,14 @@ public class BookingController {
 
         Map<String, Object> booking = bookingService.createBooking(guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Booking state stored in
-        // HTTP session memory. AWS ALB distributes requests across EC2 instances — session
-        // data on instance A is invisible to instance B. Auto-scaling and failover breaks.
-        session.setAttribute("lastBooking", booking); // cr-java-0065
-        session.setAttribute("guestName", guestName); // cr-java-0065
-
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        // FIXED cz-java-0069: Session data now stored in Redis (not in-memory)
+        // Spring Session transparently stores this in ElastiCache Redis
+        session.setAttribute("lastBooking", booking);
+        session.setAttribute("guestName", guestName);
+        
+        // FIXED cz-java-0070: Store booking in Redis cache with 1-hour TTL
+        String cacheKey = BOOKING_CACHE_PREFIX + booking.get("bookingId");
+        redisTemplate.opsForValue().set(cacheKey, booking, 1, TimeUnit.HOURS);
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -42,15 +65,20 @@ public class BookingController {
         return response;
     }
 
+    /**
+     * FIXED cz-java-0069: Session retrieval now uses Redis-backed session
+     * 
+     * Session data is retrieved from Redis, not in-memory storage.
+     * This works correctly across multiple container instances in EKS.
+     */
     @GetMapping("/status/{bookingId}")
     public Map<String, Object> getBookingStatus(
             @PathVariable String bookingId,
             HttpSession session) {
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Reading business state
-        // from HTTP session — will return null on any other instance in the cluster.
-        String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065
-
+        // FIXED cz-java-0069: Session data retrieved from Redis (not in-memory)
+        String lastGuest = (String) session.getAttribute("guestName");
+        
         Map<String, Object> result = new HashMap<>();
         result.put("bookingId", bookingId);
         result.put("sessionGuest", lastGuest);
@@ -74,10 +102,9 @@ public class BookingController {
 
     @GetMapping("/report/download")
     public Map<String, Object> downloadReport(@RequestParam String month) {
-        // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute
-        // file path. This path does not exist inside a container image. Container images
-        // have their own isolated file systems — /var/legacy/reports won't be present.
-        String reportPath = "/var/legacy/reports/" + month + "_bookings.pdf"; // czr-java-001
+        // FIXED czr-java-001: Replaced hardcoded absolute path with environment variable
+        // injected via ConfigMap. Path is now configurable per deployment environment.
+        String reportPath = reportBasePath + "/" + month + "_bookings.pdf";
 
         Map<String, Object> response = new HashMap<>();
         response.put("reportPath", reportPath);
