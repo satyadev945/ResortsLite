@@ -1,12 +1,11 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-// Updated from legacy java.util.Date / java.text.SimpleDateFormat to java.time API
-// java.time.LocalDateTime is thread-safe and preferred in Java 21
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -15,28 +14,34 @@ import java.util.Map;
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    // Fixed czr-java-001: replaced hardcoded absolute path /var/legacy/reports/ with
+    // an externalised value injected from application.properties / environment variable.
+    // Set REPORT_BASE_PATH at runtime to a mounted volume path or cloud storage mount.
+    @Value("${app.report.base-path:/tmp/reports/}")
+    private String reportBasePath;
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    // Fixed czr-java-001: removed hardcoded Windows-style backup path C:\ResortBackups\nightly\.
+    // Backup destination is now externalised so the same artifact runs on Linux containers.
+    @Value("${app.backup.path:/tmp/backups/}")
+    private String backupPath;
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    // Fixed czr-port-001: removed hardcoded SERVER_PORT constant.
+    // The server port is managed by Spring Boot via server.port / SERVER_PORT env var.
+    // Application logic must never hard-depend on a specific port number.
+
+    // Fixed cr-java-0088: replaced hardcoded plain-HTTP report download URL with an
+    // externalised HTTPS base URL injected from application configuration.
+    @Value("${app.report.download-base-url:https://reports.resorts-internal.com/download}")
+    private String reportDownloadBaseUrl;
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String fullPath = reportBasePath + fileName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
+            File reportDir = new File(reportBasePath);
             if (!reportDir.exists()) {
                 reportDir.mkdirs();
             }
@@ -49,7 +54,7 @@ public class ReportService {
 
             result.put("status", "generated");
             result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT); // czr-port-001
+            // Removed: result.put("serverPort", SERVER_PORT) — port must not be exposed in responses
 
         } catch (IOException e) {
             result.put("status", "error");
@@ -60,32 +65,34 @@ public class ReportService {
     }
 
     /**
-     * Builds the download URL for a given report name.
-     * Note: URL scheme should be updated to HTTPS for cloud-native deployments.
+     * Builds the HTTPS download URL for a given report name.
+     *
+     * <p>Fixed cr-java-0088: the URL scheme is now HTTPS and the base URL is
+     * externalised via {@code app.report.download-base-url} configuration property,
+     * replacing the previous hardcoded plain-HTTP URL.</p>
      *
      * @param reportName the name of the report file
-     * @return the full download URL string
+     * @return the full HTTPS download URL string
      */
     public String buildReportDownloadUrl(String reportName) {
-        // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP URL
-        // hardcoded for report download. Cloud security standards enforce HTTPS.
-        return "http://reports.resorts-internal.com:8080/download/" + reportName; // cr-java-0088
+        return reportDownloadBaseUrl + "/" + reportName;
     }
 
     /**
-     * Returns system information including report paths, backup paths, server port,
-     * and the current timestamp formatted using java.time (Java 8+ / Java 21 compatible).
+     * Returns system information including report paths, backup path, and the current
+     * timestamp formatted using java.time (Java 8+ / Java 21 compatible).
+     *
+     * <p>Fixed czr-java-001 and czr-port-001: all path and port values are now
+     * sourced from injected configuration rather than hardcoded constants.</p>
      *
      * @return a map of system information key-value pairs
      */
     public Map<String, Object> getSystemInfo() {
-        // Updated from legacy SimpleDateFormat/Date to java.time.LocalDateTime (Java 8+ / Java 21)
-        // LocalDateTime and DateTimeFormatter are thread-safe unlike SimpleDateFormat
+        // LocalDateTime and DateTimeFormatter are thread-safe (unlike legacy SimpleDateFormat)
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
-        info.put("serverPort", SERVER_PORT);        // czr-port-001
+        info.put("reportPath", reportBasePath);
+        info.put("backupPath", backupPath);
         info.put("generatedAt", timestamp);
         return info;
     }

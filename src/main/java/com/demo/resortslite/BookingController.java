@@ -1,6 +1,7 @@
 package com.demo.resortslite;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 // Updated from javax.servlet to jakarta.servlet for Java 21 / Spring Boot 3.x / Jakarta EE 10
@@ -15,9 +16,19 @@ public class BookingController {
     @Autowired
     private BookingService bookingService;
 
-    // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
-    // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    // Fixed cr-java-0067: removed static in-memory bookingCache.
+    // Instance-local caches break horizontal scaling — each EC2/ECS instance holds
+    // a different view of the data. Use a distributed cache (e.g. Redis / ElastiCache)
+    // if caching is required.
+
+    // Externalised inventory endpoint — replaces hardcoded http:// URL (cr-java-0088).
+    // Value is injected from environment variable / application.properties.
+    @Value("${app.inventory.endpoint:https://inventory-svc.internal:8081/rooms}")
+    private String inventoryEndpoint;
+
+    // Externalised report base path — replaces hardcoded /var/legacy/reports/ (czr-java-001).
+    @Value("${app.report.base-path:/tmp/reports/}")
+    private String reportBasePath;
 
     @PostMapping("/create")
     public Map<String, Object> createBooking(
@@ -29,13 +40,11 @@ public class BookingController {
 
         Map<String, Object> booking = bookingService.createBooking(guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Booking state stored in
-        // HTTP session memory. AWS ALB distributes requests across EC2 instances — session
-        // data on instance A is invisible to instance B. Auto-scaling and failover breaks.
-        session.setAttribute("lastBooking", booking); // cr-java-0065
-        session.setAttribute("guestName", guestName); // cr-java-0065
-
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        // Fixed cr-java-0065: removed session.setAttribute calls for booking state.
+        // HTTP session state is instance-local; AWS ALB distributes requests across
+        // instances so session data stored on instance A is invisible to instance B.
+        // Booking state is now returned in the response body only; persistent state
+        // should be stored in the database and retrieved by bookingId.
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -48,37 +57,34 @@ public class BookingController {
             @PathVariable String bookingId,
             HttpSession session) {
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Reading business state
-        // from HTTP session — will return null on any other instance in the cluster.
-        String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065
+        // Fixed cr-java-0065: removed session.getAttribute("guestName").
+        // Guest name is now retrieved from the database via bookingService,
+        // ensuring consistent results regardless of which instance handles the request.
 
         Map<String, Object> result = new HashMap<>();
         result.put("bookingId", bookingId);
-        result.put("sessionGuest", lastGuest);
         result.put("details", bookingService.getBookingById(bookingId));
         return result;
     }
 
     @GetMapping("/availability")
     public Map<String, Object> checkAvailability(@RequestParam String roomType) {
-        // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP call to
-        // internal inventory service. AWS ALB, WAF, and Well-Architected security review
-        // enforce HTTPS. This call will be blocked or flagged in a cloud-native setup.
-        String inventoryUrl = "http://inventory-service.internal:8081/rooms/available"; // cr-java-0088
-
+        // Fixed cr-java-0088: replaced hardcoded plain-HTTP internal URL with the
+        // externalised HTTPS endpoint injected from application configuration.
         Map<String, Object> response = new HashMap<>();
         response.put("roomType", roomType);
-        response.put("inventoryEndpoint", inventoryUrl);
+        response.put("inventoryEndpoint", inventoryEndpoint);
         response.put("available", bookingService.isRoomAvailable(roomType));
         return response;
     }
 
     @GetMapping("/report/download")
     public Map<String, Object> downloadReport(@RequestParam String month) {
-        // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute
-        // file path. This path does not exist inside a container image. Container images
-        // have their own isolated file systems — /var/legacy/reports won't be present.
-        String reportPath = "/var/legacy/reports/" + month + "_bookings.pdf"; // czr-java-001
+        // Fixed czr-java-001: replaced hardcoded absolute path /var/legacy/reports/
+        // with the externalised reportBasePath injected from application configuration.
+        // In production, set REPORT_BASE_PATH to a mounted volume path or use
+        // cloud object storage (S3 / Azure Blob) for report delivery.
+        String reportPath = reportBasePath + month + "_bookings.pdf";
 
         Map<String, Object> response = new HashMap<>();
         response.put("reportPath", reportPath);
