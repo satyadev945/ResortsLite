@@ -1,5 +1,6 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -13,28 +14,31 @@ import java.util.Map;
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    // cz-java-0057 [Fixed]: Hardcoded absolute path /var/legacy/reports/ replaced with
+    // environment variable REPORT_BASE_PATH injected via Kubernetes ConfigMap on EKS.
+    @Value("${app.report.base-path:#{systemEnvironment['REPORT_BASE_PATH'] ?: '/var/reports'}}")
+    private String reportBasePath; // cz-java-0057 fixed (was: private static final String REPORT_BASE_PATH = "/var/legacy/reports/")
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    // cz-java-0057 [Fixed]: Windows-style hardcoded absolute path C:\ResortBackups\nightly\
+    // replaced with environment variable BACKUP_PATH injected via Kubernetes ConfigMap on EKS.
+    @Value("${app.backup.path:#{systemEnvironment['BACKUP_PATH'] ?: '/var/backups/resorts'}}")
+    private String backupPath; // cz-java-0057 fixed (was: private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\")
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    // cz-java-0061 [Fixed]: Hardcoded port 8080 replaced with environment-variable-driven
+    // configuration via Kubernetes ConfigMap / EKS Pod spec. serverPort is now injected
+    // through the SERVER_PORT environment variable (default: 8080), enabling flexible
+    // port assignment per environment without code changes.
+    @Value("${server.port:#{systemEnvironment['SERVER_PORT'] ?: '8080'}}")
+    private int serverPort; // cz-java-0061 fixed (was: private static final int SERVER_PORT = 8080)
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String fullPath = reportBasePath + "/" + fileName; // cz-java-0057 fixed
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
+            File reportDir = new File(reportBasePath); // cz-java-0057 fixed
             if (!reportDir.exists()) {
                 reportDir.mkdirs();
             }
@@ -47,7 +51,7 @@ public class ReportService {
 
             result.put("status", "generated");
             result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT); // czr-port-001
+            result.put("serverPort", serverPort); // cz-java-0061 fixed
 
         } catch (IOException e) {
             result.put("status", "error");
@@ -69,9 +73,9 @@ public class ReportService {
     public Map<String, Object> getSystemInfo() { // doc-missing-001
         String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
-        info.put("serverPort", SERVER_PORT);        // czr-port-001
+        info.put("reportPath", reportBasePath);  // cz-java-0057 fixed
+        info.put("backupPath", backupPath);       // cz-java-0057 fixed
+        info.put("serverPort", serverPort);      // cz-java-0061 fixed
         info.put("generatedAt", timestamp);
         return info;
     }
