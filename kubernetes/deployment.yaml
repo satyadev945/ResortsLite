@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitpul-resort-monocmp
+  namespace: gitpul-resort-monocmp
+  labels:
+    app: gitpul-resort-monocmp
+    version: "1.0.0"
+    managed-by: kubectl
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gitpul-resort-monocmp
+  template:
+    metadata:
+      labels:
+        app: gitpul-resort-monocmp
+        version: "1.0.0"
+    spec:
+      containers:
+        - name: gitpul-resort-monocmp
+          image: "{{IMAGE_URI}}"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "docker"
+            - name: TZ
+              value: "UTC"
+            - name: JAVA_OPTS
+              value: "-Xmx512m -Xms256m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
+            # Redis / Amazon ElastiCache connection
+            - name: REDIS_HOST
+              value: "{{REDIS_HOST}}"
+            - name: REDIS_PORT
+              value: "{{REDIS_PORT}}"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gitpul-resort-monocmp-secrets
+                  key: redis-password
+                  optional: true
+            - name: REDIS_SSL
+              value: "{{REDIS_SSL}}"
+            # Payment service endpoint
+            - name: PAYMENT_API_URL
+              value: "{{PAYMENT_API_URL}}"
+            # Booking cache TTL
+            - name: BOOKING_CACHE_TTL_SECONDS
+              value: "{{BOOKING_CACHE_TTL_SECONDS}}"
+            # Report base path
+            - name: REPORT_BASE_PATH
+              value: "/var/reports"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: reports-volume
+              mountPath: /var/reports
+      volumes:
+        - name: reports-volume
+          emptyDir: {}
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000

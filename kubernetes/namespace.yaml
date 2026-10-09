@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gitpul-resort-monocmp
+  labels:
+    name: gitpul-resort-monocmp
+    app: gitpul-resort-monocmp
+    managed-by: kubectl
