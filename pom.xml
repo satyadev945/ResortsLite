@@ -26,6 +26,23 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- Health check endpoint: exposes /actuator/health for container liveness/readiness probes -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <!-- cz-java-0063: Spring Session Data Redis externalizes HttpSession to Amazon ElastiCache
+                 (Redis) so session state is shared across all EKS pod replicas. HttpSession API is
+                 transparently replaced — no application code changes required beyond this dependency. -->
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <!-- cz-java-0063: Lettuce Redis client required by Spring Session Data Redis -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
