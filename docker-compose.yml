@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  resortslite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: resortslite:latest
+    container_name: resortslite-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Spring Boot Configuration
+      SPRING_PROFILES_ACTIVE: docker
+      
+      # Database Configuration (Oracle)
+      SPRING_DATASOURCE_URL: ${DATABASE_URL:-jdbc:oracle:thin:@host.docker.internal:1521:ORCL}
+      SPRING_DATASOURCE_USERNAME: ${DATABASE_USERNAME:-admin}
+      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD:-changeme}
+      
+      # Redis Configuration (Session Store & Cache)
+      REDIS_HOST: ${REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SSL: ${REDIS_SSL:-false}
+      
+      # External Service Endpoints
+      PAYMENT_API_URL: ${PAYMENT_API_URL:-http://host.docker.internal:9090/payments/charge}
+      
+      # Application Paths
+      REPORT_PATH: /app/reports
+      BACKUP_PATH: /app/backups
+      
+      # JVM Settings
+      JAVA_OPTS: "-Xmx512m -Xms256m -XX:+UseContainerSupport"
+    volumes:
+      - ./reports:/app/reports
+      - ./backups:/app/backups
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  app-network:
+    driver: bridge
