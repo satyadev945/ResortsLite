@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
@@ -31,17 +32,14 @@ public class BookingService {
                                               String checkIn, String checkOut) {
         String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
-        // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
-        // An attacker can pass guestName = "'; DROP TABLE bookings; --" to destroy data.
-        // Use parameterised queries (JdbcTemplate with '?') to prevent SQL injection.
-        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES ('" // sql-inject-001
-                + bookingId + "', '" + guestName + "', '" + roomType               // sql-inject-001
-                + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
-        jdbcTemplate.execute(sql);
+        // Fixed: Use parameterised query to prevent SQL injection (was string concatenation)
+        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)";
+        jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
-        // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
-        String confirmCode = md5Hash(bookingId + guestName); // sec-weak-hash-001
+        // Fixed: Replaced MD5 (broken, RFC 6151) with SHA-256 for confirmation code hashing.
+        // Also fixed: explicit UTF-8 charset passed to getBytes() to avoid default-charset
+        // behaviour change introduced in Java 18 (JEP 400).
+        String confirmCode = sha256Hash(bookingId + guestName);
 
         Map<String, Object> booking = new HashMap<>();
         booking.put("bookingId", bookingId);
@@ -55,12 +53,11 @@ public class BookingService {
     }
 
     public Map<String, Object> getBookingById(String bookingId) {
-        // VIOLATION [Security Health / Critical]: SQL injection via string concatenation.
-        // bookingId is user-supplied input appended directly into the SQL string.
-        String sql = "SELECT * FROM bookings WHERE id = '" + bookingId + "'"; // sql-inject-001
+        // Fixed: Use parameterised query to prevent SQL injection (was string concatenation)
+        String sql = "SELECT * FROM bookings WHERE id = ?";
         Map<String, Object> result = new HashMap<>();
         try {
-            result = jdbcTemplate.queryForMap(sql);
+            result = jdbcTemplate.queryForMap(sql, bookingId);
         } catch (Exception e) {
             result.put("error", "Booking not found: " + bookingId);
         }
@@ -103,10 +100,16 @@ public class BookingService {
         return "Report generation triggered for: " + month + " via " + PAYMENT_API;
     }
 
-    private String md5Hash(String input) { // sec-weak-hash-001
+    /**
+     * Computes a SHA-256 hex digest of the given input string.
+     * Uses explicit UTF-8 encoding (StandardCharsets.UTF_8) so that the result
+     * is deterministic regardless of the JVM default charset (changed to UTF-8
+     * unconditionally in Java 18 via JEP 400, but explicit is always safer).
+     */
+    private String sha256Hash(String input) {
         try {
-            MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
-            byte[] hash = md.digest(input.getBytes());
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
             return sb.toString();

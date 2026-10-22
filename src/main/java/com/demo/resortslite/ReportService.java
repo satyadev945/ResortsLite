@@ -5,8 +5,9 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -27,6 +28,10 @@ public class ReportService {
     // dynamic port binding required for modern container deployment and service discovery.
     private static final int SERVER_PORT = 8080; // czr-port-001
 
+    // Fixed: DateTimeFormatter is thread-safe (unlike SimpleDateFormat) and uses java.time API
+    private static final DateTimeFormatter TIMESTAMP_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
         String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
@@ -39,11 +44,15 @@ public class ReportService {
                 reportDir.mkdirs();
             }
 
-            FileWriter writer = new FileWriter(fullPath);
-            writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
-            writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
-            writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
-            writer.close();
+            // Fixed: FileWriter now uses explicit UTF-8 charset (StandardCharsets.UTF_8).
+            // Prior to this fix, FileWriter relied on the JVM default charset which changed
+            // to UTF-8 unconditionally in Java 18 (JEP 400). Using an explicit charset
+            // makes the behaviour deterministic across all Java versions.
+            try (FileWriter writer = new FileWriter(fullPath, StandardCharsets.UTF_8)) {
+                writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
+                writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
+                writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
+            }
 
             result.put("status", "generated");
             result.put("path", fullPath);
@@ -67,7 +76,10 @@ public class ReportService {
     }
 
     public Map<String, Object> getSystemInfo() { // doc-missing-001
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        // Fixed: Replaced legacy java.util.Date + SimpleDateFormat with java.time.LocalDateTime
+        // and DateTimeFormatter. java.util.Date is deprecated for most uses since Java 8 and
+        // SimpleDateFormat is not thread-safe. DateTimeFormatter is immutable and thread-safe.
+        String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
         Map<String, Object> info = new HashMap<>();
         info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
         info.put("backupPath", BACKUP_PATH);        // czr-java-001
