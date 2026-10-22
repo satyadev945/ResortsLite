@@ -1,12 +1,46 @@
 package com.demo.resortslite;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.session.data.redis.config.annotation.web.http.EnableRedisHttpSession;
 import org.springframework.web.bind.annotation.*;
+import software.amazon.awssdk.services.ssm.SsmClient;
 
 import javax.servlet.http.HttpSession;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
+/**
+ * BookingController — cloud-ready REST controller.
+ *
+ * cr-java-0065 FIX (HTTP Session State Storage):
+ *   All HttpSession usage is now backed by Amazon ElastiCache for Redis via
+ *   Spring Session (spring-session-data-redis). The HttpSession API is preserved
+ *   so that no business logic changes are required; Spring Session transparently
+ *   serialises session attributes to Redis on every setAttribute/getAttribute call.
+ *   This makes every application instance fully stateless — any instance in the
+ *   Auto Scaling Group can serve any request, and session data survives instance
+ *   termination, restarts, and scale-in events.
+ *
+ *   Required additions (already applied):
+ *     • pom.xml  — spring-session-data-redis + spring-boot-starter-data-redis
+ *     • application.properties — spring.redis.host / port / ssl / timeout
+ *     • @EnableRedisHttpSession on this class (or on a dedicated @Configuration)
+ *
+ * cr-java-0067 FIX (In-Memory Caching Without TTL):
+ *   The unbounded static HashMap bookingCache has been replaced with Amazon
+ *   ElastiCache for Redis via Spring Data RedisTemplate. Every cache entry is
+ *   written with a configurable TTL (default 60 minutes) so that:
+ *     • Memory growth is bounded — entries expire automatically.
+ *     • All application instances share the same cache — no stale-data divergence.
+ *     • Cache survives instance restarts and scale-in events.
+ *   The TTL is externalised to application.properties / environment variable
+ *   (app.booking.cache.ttl-minutes) so it can be tuned per environment without
+ *   a code change.
+ */
+@EnableRedisHttpSession
 @RestController
 @RequestMapping("/api/bookings")
 public class BookingController {
@@ -14,9 +48,37 @@ public class BookingController {
     @Autowired
     private BookingService bookingService;
 
-    // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
-    // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    // cr-java-0071 FIX: SSM client injected to resolve environment-specific URLs
+    // from AWS Systems Manager Parameter Store instead of hard-coding them.
+    @Autowired
+    private SsmClient ssmClient;
+
+    // cr-java-0067 FIX: RedisTemplate replaces the unbounded static HashMap.
+    // Spring Boot auto-configures this bean when spring-boot-starter-data-redis
+    // is on the classpath and spring.redis.host / port are set in
+    // application.properties. All cache reads/writes go to Amazon ElastiCache.
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+
+    // cr-java-0067 FIX: Cache key prefix — namespaces booking entries in Redis
+    // so they do not collide with Spring Session keys or other application data.
+    private static final String BOOKING_CACHE_PREFIX = "booking:";
+
+    // cr-java-0067 FIX: TTL for booking cache entries, externalised to
+    // application.properties / environment variable. Default is 60 minutes.
+    // Override APP_BOOKING_CACHE_TTL_MINUTES in cloud deployment to tune per environment.
+    @Value("${app.booking.cache.ttl-minutes:60}")
+    private long bookingCacheTtlMinutes;
+
+    // cr-java-0071 FIX: SSM parameter name for the inventory service URL is
+    // externalised to application.properties / environment variable, not hard-coded.
+    @Value("${ssm.inventory.url.param:/resortslite/inventory-service-url}")
+    private String inventoryUrlParamName;
+
+    // cr-java-0071 FIX: Fallback value used only when SSM is unreachable
+    // (e.g. local development). In production the SSM parameter takes precedence.
+    @Value("${app.inventory.url.default:https://inventory-service.internal:8081/rooms/available}")
+    private String inventoryUrlDefault;
 
     @PostMapping("/create")
     public Map<String, Object> createBooking(
@@ -28,13 +90,18 @@ public class BookingController {
 
         Map<String, Object> booking = bookingService.createBooking(guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Booking state stored in
-        // HTTP session memory. AWS ALB distributes requests across EC2 instances — session
-        // data on instance A is invisible to instance B. Auto-scaling and failover breaks.
-        session.setAttribute("lastBooking", booking); // cr-java-0065
-        session.setAttribute("guestName", guestName); // cr-java-0065
+        // cr-java-0065 FIX: HttpSession is now backed by Amazon ElastiCache for Redis
+        // via Spring Session. setAttribute() serialises the value to Redis so that all
+        // application instances share the same session store — no server affinity required.
+        session.setAttribute("lastBooking", booking); // cr-java-0065 FIXED — stored in Redis
+        session.setAttribute("guestName", guestName); // cr-java-0065 FIXED — stored in Redis
 
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        // cr-java-0067 FIX: Cache the booking in Amazon ElastiCache for Redis with a TTL.
+        // RedisTemplate.opsForValue().set() writes the entry to the shared Redis cluster
+        // so that all application instances can read it. The TTL ensures the entry expires
+        // automatically after bookingCacheTtlMinutes, preventing unbounded memory growth.
+        String cacheKey = BOOKING_CACHE_PREFIX + booking.get("bookingId");
+        redisTemplate.opsForValue().set(cacheKey, booking, bookingCacheTtlMinutes, TimeUnit.MINUTES);
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -47,23 +114,35 @@ public class BookingController {
             @PathVariable String bookingId,
             HttpSession session) {
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Reading business state
-        // from HTTP session — will return null on any other instance in the cluster.
-        String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065
+        // cr-java-0065 FIX: getAttribute() now reads from the centralised Redis session
+        // store via Spring Session. Any instance in the cluster returns the correct value
+        // regardless of which instance originally wrote the session attribute.
+        String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065 FIXED — read from Redis
+
+        // cr-java-0067 FIX: Retrieve booking details from the shared Redis cache.
+        // If the entry has expired (TTL elapsed) or was never cached, the value will
+        // be null and the controller falls back to the BookingService for a fresh lookup.
+        String cacheKey = BOOKING_CACHE_PREFIX + bookingId;
+        @SuppressWarnings("unchecked")
+        Map<String, Object> cachedBooking = (Map<String, Object>) redisTemplate.opsForValue().get(cacheKey);
 
         Map<String, Object> result = new HashMap<>();
         result.put("bookingId", bookingId);
         result.put("sessionGuest", lastGuest);
-        result.put("details", bookingService.getBookingById(bookingId));
+        result.put("details", cachedBooking != null ? cachedBooking : bookingService.getBookingById(bookingId));
         return result;
     }
 
     @GetMapping("/availability")
     public Map<String, Object> checkAvailability(@RequestParam String roomType) {
-        // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP call to
-        // internal inventory service. AWS ALB, WAF, and Well-Architected security review
-        // enforce HTTPS. This call will be blocked or flagged in a cloud-native setup.
-        String inventoryUrl = "http://inventory-service.internal:8081/rooms/available"; // cr-java-0088
+        // cr-java-0071 FIX (Hard-coded Environment URLs — line 66):
+        // The hard-coded URL "http://inventory-service.internal:8081/rooms/available"
+        // has been replaced with a value retrieved at runtime from AWS Systems Manager
+        // Parameter Store. The SSM parameter name is itself externalised via
+        // application.properties (ssm.inventory.url.param), enabling environment-agnostic
+        // deployments without any code changes between dev / staging / production.
+        String inventoryUrl = SsmParameterStoreConfig.getParameter(
+                ssmClient, inventoryUrlParamName, inventoryUrlDefault); // cr-java-0071 FIXED
 
         Map<String, Object> response = new HashMap<>();
         response.put("roomType", roomType);

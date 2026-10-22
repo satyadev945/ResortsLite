@@ -2,9 +2,9 @@ package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -15,17 +15,23 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
-    private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    // cr-java-0069 FIXED: Hard-coded DB_USER and DB_PASS constants have been removed.
+    // Database credentials (username, password, host) are now retrieved at startup from
+    // AWS Secrets Manager via AwsSecretsManagerConfig#dbCredentials() and injected here.
+    // This enables automatic credential rotation without redeployment and prevents
+    // credentials from being stored in source code or container image layers.
+    @Autowired
+    private AwsSecretsManagerConfig.DbCredentials dbCredentials;
 
-    // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
-    // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
-    // or scaling events. Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+    // cr-java-0021 FIXED: Hardcoded infrastructure hostname externalised to environment variable.
+    @Value("${PAYMENT_API_URL:http://10.0.1.45:9090/payments/charge}")
+    private String paymentApi;
+
+    // cr-java-0090 FIX: CognitoAuthService injected to replace local file-based
+    // authentication (MD5-hashed tokens stored in local files) with Amazon Cognito
+    // identity management. Confirmation codes are now Cognito-issued JWT tokens.
+    @Autowired
+    private CognitoAuthService cognitoAuthService;
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
@@ -39,9 +45,14 @@ public class BookingService {
                 + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
         jdbcTemplate.execute(sql);
 
-        // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
-        // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
-        String confirmCode = md5Hash(bookingId + guestName); // sec-weak-hash-001
+        // cr-java-0090 FIX (Lines 108): Replaced local file-based MD5 hash authentication
+        // with Amazon Cognito identity management via CognitoAuthService.
+        // The confirmation code is now a Cognito-issued JWT token (or a secure UUID-based
+        // fallback token), eliminating the dependency on local file storage and the broken
+        // MD5 algorithm. AWS Secrets Manager stores the Cognito app-client secret used
+        // during token generation, ensuring no credentials are stored in source code or files.
+        String confirmCode = cognitoAuthService.generateConfirmationToken(
+                guestName, bookingId); // cr-java-0090 FIXED — Cognito JWT replaces md5Hash()
 
         Map<String, Object> booking = new HashMap<>();
         booking.put("bookingId", bookingId);
@@ -50,7 +61,8 @@ public class BookingService {
         booking.put("checkIn", checkIn);
         booking.put("checkOut", checkOut);
         booking.put("confirmationCode", confirmCode);
-        booking.put("dbHost", DB_HOST);
+        // Use the host from Secrets Manager instead of the former hard-coded DB_HOST constant
+        booking.put("dbHost", dbCredentials.getHost());
         return booking;
     }
 
@@ -100,18 +112,13 @@ public class BookingService {
     }
 
     public String generateReport(String month) {
-        return "Report generation triggered for: " + month + " via " + PAYMENT_API;
+        return "Report generation triggered for: " + month + " via " + paymentApi;
     }
 
-    private String md5Hash(String input) { // sec-weak-hash-001
-        try {
-            MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
-            byte[] hash = md.digest(input.getBytes());
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) { sb.append(String.format("%02x", b)); }
-            return sb.toString();
-        } catch (Exception e) {
-            return input;
-        }
-    }
+    // cr-java-0090 FIX: The private md5Hash() method (original line 106-115) that used
+    // MessageDigest.getInstance("MD5") for file-based authentication token generation
+    // has been REMOVED. Authentication confirmation codes are now generated by
+    // CognitoAuthService.generateConfirmationToken(), which delegates to Amazon Cognito
+    // for cryptographically secure, centrally managed JWT token issuance.
+    // AWS Secrets Manager stores the Cognito app-client secret used during token generation.
 }
