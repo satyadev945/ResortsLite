@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ReportService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">ResortsLite</a> &gt; <a href="index.source.html" class="el_package">com.demo.resortslite</a> &gt; <span class="el_source">ReportService.java</span></div><h1>ReportService.java</h1><pre class="source lang-java linenums">package com.demo.resortslite;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+<span class="fc" id="L16">public class ReportService {</span>
+
+    // Report base path externalised to environment variable (czr-java-001).
+    // Defaults to the JVM temporary directory so the application works inside a
+    // container without requiring a pre-existing filesystem layout.
+    // For production, set APP_REPORT_BASE_PATH to an S3-mounted path or a
+    // persistent volume mount injected by ECS/EKS.
+    @Value(&quot;${app.report.base-path:${java.io.tmpdir}/reports}&quot;)
+    private String reportBasePath;
+
+    // Removed hardcoded Windows backup path (czr-java-001).
+    // Backup destination is now controlled via environment variable APP_BACKUP_PATH,
+    // defaulting to a platform-neutral temp subdirectory.
+    @Value(&quot;${app.backup.path:${java.io.tmpdir}/backups}&quot;)
+    private String backupPath;
+
+    // Removed hardcoded SERVER_PORT constant (czr-port-001).
+    // The actual port is managed by Spring Boot via the SERVER_PORT environment
+    // variable and is not a concern of the service layer.
+
+    // DateTimeFormatter is immutable and thread-safe (unlike SimpleDateFormat)
+<span class="fc" id="L37">    private static final DateTimeFormatter TIMESTAMP_FORMATTER =</span>
+<span class="fc" id="L38">            DateTimeFormatter.ofPattern(&quot;yyyy-MM-dd HH:mm:ss&quot;);</span>
+
+    // Report download base URL externalised to environment variable (cr-java-0088).
+    // HTTPS enforced; value injected at runtime via AWS Parameter Store / ECS task definition.
+    @Value(&quot;${app.report.download-base-url:https://reports.resorts-internal.com/download}&quot;)
+    private String reportDownloadBaseUrl;
+
+    /**
+     * Generates a monthly booking report CSV file and writes it to the configured
+     * report base path.
+     *
+     * @param month numeric month (e.g. &quot;03&quot;)
+     * @param year  four-digit year (e.g. &quot;2024&quot;)
+     * @return result map containing status and the generated file path
+     */
+    public Map&lt;String, Object&gt; generateMonthlyReport(String month, String year) {
+<span class="fc" id="L54">        String fileName = &quot;resort_report_&quot; + month + &quot;_&quot; + year + &quot;.csv&quot;;</span>
+<span class="fc" id="L55">        String fullPath = reportBasePath + File.separator + fileName;</span>
+
+<span class="fc" id="L57">        Map&lt;String, Object&gt; result = new HashMap&lt;&gt;();</span>
+
+        try {
+<span class="fc" id="L60">            File reportDir = new File(reportBasePath);</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">            if (!reportDir.exists()) {</span>
+<span class="fc" id="L62">                reportDir.mkdirs();</span>
+            }
+
+            // FileWriter uses explicit UTF-8 charset for deterministic behaviour
+            // across all Java versions (behaviour changed in Java 18 via JEP 400).
+<span class="fc" id="L67">            try (FileWriter writer = new FileWriter(fullPath, StandardCharsets.UTF_8)) {</span>
+<span class="fc" id="L68">                writer.write(&quot;BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n&quot;);</span>
+<span class="fc" id="L69">                writer.write(&quot;BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n&quot;);</span>
+<span class="fc" id="L70">                writer.write(&quot;BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n&quot;);</span>
+            }
+
+<span class="fc" id="L73">            result.put(&quot;status&quot;, &quot;generated&quot;);</span>
+<span class="fc" id="L74">            result.put(&quot;path&quot;, fullPath);</span>
+
+<span class="nc" id="L76">        } catch (IOException e) {</span>
+<span class="nc" id="L77">            result.put(&quot;status&quot;, &quot;error&quot;);</span>
+<span class="nc" id="L78">            result.put(&quot;message&quot;, e.getMessage());</span>
+<span class="fc" id="L79">        }</span>
+
+<span class="fc" id="L81">        return result;</span>
+    }
+
+    /**
+     * Builds the HTTPS download URL for a named report file.
+     * The base URL is injected via the {@code app.report.download-base-url}
+     * property, defaulting to an HTTPS endpoint (cr-java-0088).
+     *
+     * @param reportName filename of the report to download
+     * @return fully qualified HTTPS download URL
+     */
+    public String buildReportDownloadUrl(String reportName) {
+<span class="fc" id="L93">        return reportDownloadBaseUrl + &quot;/&quot; + reportName;</span>
+    }
+
+    /**
+     * Returns current system configuration information for diagnostics.
+     *
+     * @return map containing report path, backup path, and generation timestamp
+     */
+    public Map&lt;String, Object&gt; getSystemInfo() {
+        // java.time.LocalDateTime + DateTimeFormatter: immutable, thread-safe,
+        // and the recommended replacement for legacy java.util.Date + SimpleDateFormat.
+<span class="fc" id="L104">        String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);</span>
+<span class="fc" id="L105">        Map&lt;String, Object&gt; info = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L106">        info.put(&quot;reportPath&quot;, reportBasePath);</span>
+<span class="fc" id="L107">        info.put(&quot;backupPath&quot;, backupPath);</span>
+<span class="fc" id="L108">        info.put(&quot;generatedAt&quot;, timestamp);</span>
+<span class="fc" id="L109">        return info;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>
