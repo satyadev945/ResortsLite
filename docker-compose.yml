@@ -13,8 +13,8 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       TZ: UTC
       JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
-      # Oracle Database connection (provide at runtime)
-      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:oracle:thin:@<DB_HOST>:1521:<DB_SID>}
+      # PostgreSQL Database connection (provide at runtime)
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://<DB_HOST>:5432/<DB_NAME>}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-admin}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-changeme}
       # Azure Cache for Redis (Spring Session + Cache)

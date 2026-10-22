@@ -33,7 +33,7 @@ spec:
               value: "UTC"
             - name: JAVA_OPTS
               value: "-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
-            # Oracle Database connection
+            # PostgreSQL Database connection
             - name: SPRING_DATASOURCE_URL
               value: "{{SPRING_DATASOURCE_URL}}"
             - name: SPRING_DATASOURCE_USERNAME
