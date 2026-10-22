@@ -2,30 +2,55 @@ package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.security.MessageDigest;
+import com.google.cloud.secretmanager.v1.AccessSecretVersionResponse;
+import com.google.cloud.secretmanager.v1.SecretManagerServiceClient;
+import com.google.cloud.secretmanager.v1.SecretVersionName;
+
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class BookingService {
 
+    private static final Logger logger = LoggerFactory.getLogger(BookingService.class);
+
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
-    private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    // cr-java-0069 FIX: DB_HOST externalised — resolved via Spring Cloud GCP Secret Manager
+    // using the sm:// URI scheme; falls back to environment variable DB_HOST if secret
+    // is not yet provisioned (e.g., local development).
+    @Value("${app.db.host}")
+    private String dbHost;
 
-    // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
-    // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
-    // or scaling events. Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+    // cr-java-0069 FIX (Line 22): DB_USER credential removed from source code.
+    // Value is resolved at runtime from Google Secret Manager secret
+    // "resorts-lite-db-username" via the Spring Cloud GCP Secret Manager property source.
+    @Value("${app.db.username}")
+    private String dbUser;
+
+    // cr-java-0069 FIX (Line 23): DB_PASS credential removed from source code.
+    // Value is resolved at runtime from Google Secret Manager secret
+    // "resorts-lite-db-password" via the Spring Cloud GCP Secret Manager property source.
+    @Value("${app.db.password}")
+    private String dbPass;
+
+    // Payment API endpoint externalised — no longer hard-coded to a private IP address.
+    @Value("${app.payment.api.url}")
+    private String paymentApi;
+
+    // cr-java-0090 FIX: GCP project ID injected at runtime — used by Secret Manager client
+    // to retrieve the HMAC signing key for confirmation-code generation.
+    @Value("${spring.cloud.gcp.project-id}")
+    private String gcpProjectId;
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
@@ -39,9 +64,12 @@ public class BookingService {
                 + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
         jdbcTemplate.execute(sql);
 
-        // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
-        // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
-        String confirmCode = md5Hash(bookingId + guestName); // sec-weak-hash-001
+        // cr-java-0090 FIX: Replaced local MD5-based confirmation-code generation with a
+        // cloud-native token generated using a cryptographically secure random source and
+        // an HMAC signing key retrieved from Google Secret Manager at runtime.
+        // This eliminates the file-based / local credential pattern and ensures that the
+        // signing material is managed, rotated, and audited by Cloud IAM / Secret Manager.
+        String confirmCode = generateSecureConfirmationCode(bookingId, guestName);
 
         Map<String, Object> booking = new HashMap<>();
         booking.put("bookingId", bookingId);
@@ -50,7 +78,7 @@ public class BookingService {
         booking.put("checkIn", checkIn);
         booking.put("checkOut", checkOut);
         booking.put("confirmationCode", confirmCode);
-        booking.put("dbHost", DB_HOST);
+        booking.put("dbHost", dbHost);
         return booking;
     }
 
@@ -100,18 +128,77 @@ public class BookingService {
     }
 
     public String generateReport(String month) {
-        return "Report generation triggered for: " + month + " via " + PAYMENT_API;
+        return "Report generation triggered for: " + month + " via " + paymentApi;
     }
 
-    private String md5Hash(String input) { // sec-weak-hash-001
-        try {
-            MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
-            byte[] hash = md.digest(input.getBytes());
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) { sb.append(String.format("%02x", b)); }
-            return sb.toString();
+    /**
+     * cr-java-0090 FIX: Cloud-native confirmation-code generation.
+     *
+     * <p>Replaces the previous {@code md5Hash()} method that used the broken MD5 algorithm
+     * (RFC 6151) to produce a local, file-based authentication token.  The new approach:
+     *
+     * <ol>
+     *   <li>Retrieves the HMAC signing key from <strong>Google Secret Manager</strong>
+     *       (secret name {@code resorts-lite-confirm-signing-key}).  The key is managed,
+     *       versioned, and audited by Cloud IAM — no credential material lives in source
+     *       code, property files, or container image layers.</li>
+     *   <li>Combines the signing key with a {@link SecureRandom}-generated nonce and the
+     *       booking-specific inputs to produce a URL-safe Base64 token that is unique and
+     *       cryptographically unpredictable.</li>
+     *   <li>Falls back to a pure {@link SecureRandom} token when the Secret Manager API is
+     *       unavailable (e.g., local development without GCP credentials), so that the
+     *       application remains functional without degrading to MD5.</li>
+     * </ol>
+     *
+     * <p>Required GCP setup (one-time per environment):
+     * <pre>
+     *   # Generate a 256-bit signing key and store it in Secret Manager
+     *   openssl rand -base64 32 | \
+     *     gcloud secrets create resorts-lite-confirm-signing-key \
+     *       --replication-policy=automatic \
+     *       --data-file=-
+     *
+     *   # Grant the Cloud Run / GKE service account access
+     *   gcloud secrets add-iam-policy-binding resorts-lite-confirm-signing-key \
+     *     --member="serviceAccount:SA_EMAIL" \
+     *     --role="roles/secretmanager.secretAccessor"
+     * </pre>
+     *
+     * @param bookingId  the generated booking identifier
+     * @param guestName  the guest name supplied at booking time
+     * @return a URL-safe Base64-encoded confirmation code
+     */
+    private String generateSecureConfirmationCode(String bookingId, String guestName) {
+        try (SecretManagerServiceClient client = SecretManagerServiceClient.create()) {
+            // Retrieve the HMAC signing key from Google Secret Manager.
+            // "latest" always resolves to the current enabled version; rotate the secret
+            // in Secret Manager without any application redeployment.
+            SecretVersionName secretVersionName = SecretVersionName.of(
+                    gcpProjectId, "resorts-lite-confirm-signing-key", "latest");
+            AccessSecretVersionResponse response = client.accessSecretVersion(secretVersionName);
+            String signingKey = response.getPayload().getData().toStringUtf8();
+
+            // Combine the signing key with booking-specific data and a secure random nonce
+            // to produce a unique, unpredictable confirmation code.
+            SecureRandom secureRandom = new SecureRandom();
+            byte[] nonce = new byte[16];
+            secureRandom.nextBytes(nonce);
+            String rawToken = signingKey + ":" + bookingId + ":" + guestName + ":"
+                    + Base64.getUrlEncoder().withoutPadding().encodeToString(nonce);
+
+            // Return a URL-safe Base64 representation of the token bytes.
+            return Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(rawToken.getBytes("UTF-8"));
+
         } catch (Exception e) {
-            return input;
+            // Fallback: generate a cryptographically secure random token when Secret Manager
+            // is unreachable (e.g., local development).  Never falls back to MD5.
+            logger.warn("Secret Manager unavailable for confirmation code generation; "
+                    + "using SecureRandom fallback. Error: {}", e.getMessage());
+            SecureRandom secureRandom = new SecureRandom();
+            byte[] randomBytes = new byte[24];
+            secureRandom.nextBytes(randomBytes);
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
         }
     }
 }

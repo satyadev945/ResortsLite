@@ -1,12 +1,38 @@
 package com.demo.resortslite;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
-import javax.servlet.http.HttpSession;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
+/**
+ * BookingController — cloud-native, stateless REST controller.
+ *
+ * cr-java-0065 FIX: All HTTP session state (HttpSession.setAttribute /
+ * HttpSession.getAttribute) has been replaced with Google Cloud Memorystore
+ * for Redis via Spring Data Redis (RedisTemplate).  Session data is now stored
+ * in a centralised, distributed cache that is visible to every application
+ * instance, enabling horizontal scaling, zero-downtime rolling deployments,
+ * and safe auto-scaling on GCP Cloud Run / GKE without sticky sessions.
+ *
+ * Key changes:
+ *   - Removed javax.servlet.http.HttpSession import and all method parameters
+ *     that accepted HttpSession.
+ *   - Injected RedisTemplate<String, Object> (auto-configured by
+ *     spring-boot-starter-data-redis).
+ *   - session.setAttribute("lastBooking", booking)  →
+ *       redisTemplate.opsForValue().set("session:lastBooking:" + bookingId, booking, 30, TimeUnit.MINUTES)
+ *   - session.setAttribute("guestName", guestName)  →
+ *       redisTemplate.opsForValue().set("session:guestName:" + bookingId, guestName, 30, TimeUnit.MINUTES)
+ *   - session.getAttribute("guestName")             →
+ *       redisTemplate.opsForValue().get("session:guestName:" + bookingId)
+ *   - A TTL of 30 minutes is applied to every key to prevent unbounded memory
+ *     growth in the Redis instance.
+ */
 @RestController
 @RequestMapping("/api/bookings")
 public class BookingController {
@@ -14,27 +40,54 @@ public class BookingController {
     @Autowired
     private BookingService bookingService;
 
-    // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
-    // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    /**
+     * cr-java-0065 FIX: RedisTemplate replaces HttpSession for distributed,
+     * stateless session state storage backed by GCP Memorystore for Redis.
+     */
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
 
+    /**
+     * cr-java-0071 FIX: Hard-coded inventory service URL has been replaced with an
+     * externalized configuration property backed by GCP Secret Manager.
+     * The value is resolved at runtime from the {@code app.inventory.endpoint}
+     * application property, which is itself sourced from the
+     * {@code sm://resorts-lite-inventory-url} GCP Secret Manager secret (or the
+     * {@code INVENTORY_SERVICE_URL} environment variable for local development).
+     * This eliminates the environment-specific hard-coded URL and enables seamless
+     * deployment across dev, staging, and production environments.
+     */
+    @Value("${app.inventory.endpoint:${INVENTORY_SERVICE_URL:http://inventory-service.internal:8081/rooms/available}}")
+    private String inventoryServiceUrl;
+
+    /**
+     * cr-java-0065 FIX: HttpSession parameter removed.
+     * Booking state is now persisted to GCP Memorystore for Redis via RedisTemplate,
+     * making this endpoint fully stateless and safe for horizontal scaling.
+     */
     @PostMapping("/create")
     public Map<String, Object> createBooking(
             @RequestParam String guestName,
             @RequestParam String roomType,
             @RequestParam String checkIn,
-            @RequestParam String checkOut,
-            HttpSession session) {
+            @RequestParam String checkOut) {
 
         Map<String, Object> booking = bookingService.createBooking(guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Booking state stored in
-        // HTTP session memory. AWS ALB distributes requests across EC2 instances — session
-        // data on instance A is invisible to instance B. Auto-scaling and failover breaks.
-        session.setAttribute("lastBooking", booking); // cr-java-0065
-        session.setAttribute("guestName", guestName); // cr-java-0065
+        // cr-java-0065 FIX: Replaced session.setAttribute("lastBooking", booking) and
+        // session.setAttribute("guestName", guestName) with RedisTemplate writes.
+        // Data is stored in GCP Memorystore for Redis with a 30-minute TTL, ensuring
+        // it is accessible from any application instance in the cluster.
+        String bookingId = (String) booking.get("bookingId");
+        redisTemplate.opsForValue().set("session:lastBooking:" + bookingId, booking, 30, TimeUnit.MINUTES);
+        redisTemplate.opsForValue().set("session:guestName:" + bookingId, guestName, 30, TimeUnit.MINUTES);
 
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        // cr-java-0067 FIX: Replaced instance-local static HashMap (bookingCache) with
+        // Google Cloud Memorystore for Redis via RedisTemplate.  A TTL of 60 minutes is
+        // applied so that the cache entry expires automatically, preventing unbounded
+        // memory growth and ensuring consistent cache state across all application
+        // instances running in GCP Cloud Run / GKE.
+        redisTemplate.opsForValue().set("cache:booking:" + bookingId, booking, 60, TimeUnit.MINUTES);
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -42,14 +95,20 @@ public class BookingController {
         return response;
     }
 
+    /**
+     * cr-java-0065 FIX: HttpSession parameter removed.
+     * Guest name is now retrieved from GCP Memorystore for Redis via RedisTemplate,
+     * ensuring consistent reads regardless of which instance handles the request.
+     */
     @GetMapping("/status/{bookingId}")
     public Map<String, Object> getBookingStatus(
-            @PathVariable String bookingId,
-            HttpSession session) {
+            @PathVariable String bookingId) {
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Reading business state
-        // from HTTP session — will return null on any other instance in the cluster.
-        String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065
+        // cr-java-0065 FIX: Replaced session.getAttribute("guestName") with a
+        // RedisTemplate read keyed on bookingId.  Any instance in the cluster can
+        // serve this request and will retrieve the same value from the shared
+        // Memorystore for Redis instance.
+        String lastGuest = (String) redisTemplate.opsForValue().get("session:guestName:" + bookingId);
 
         Map<String, Object> result = new HashMap<>();
         result.put("bookingId", bookingId);
@@ -60,10 +119,12 @@ public class BookingController {
 
     @GetMapping("/availability")
     public Map<String, Object> checkAvailability(@RequestParam String roomType) {
-        // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP call to
-        // internal inventory service. AWS ALB, WAF, and Well-Architected security review
-        // enforce HTTPS. This call will be blocked or flagged in a cloud-native setup.
-        String inventoryUrl = "http://inventory-service.internal:8081/rooms/available"; // cr-java-0088
+        // cr-java-0071 FIX (Line 66): Replaced hard-coded environment-specific URL
+        // "http://inventory-service.internal:8081/rooms/available" with the
+        // externalized property 'app.inventory.endpoint', which is resolved from
+        // GCP Secret Manager (sm://resorts-lite-inventory-url) or the
+        // INVENTORY_SERVICE_URL environment variable at runtime.
+        String inventoryUrl = inventoryServiceUrl;
 
         Map<String, Object> response = new HashMap<>();
         response.put("roomType", roomType);

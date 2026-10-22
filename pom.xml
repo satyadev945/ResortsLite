@@ -19,9 +19,58 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <!-- GCS SDK BOM version — keeps all google-cloud-storage artifacts in sync -->
+        <google-cloud-storage.version>2.29.1</google-cloud-storage.version>
+        <!-- Spring Cloud GCP BOM version — manages Secret Manager and other GCP starters -->
+        <spring-cloud-gcp.version>4.8.4</spring-cloud-gcp.version>
+        <spring-cloud.version>2021.0.8</spring-cloud.version>
+        <!-- Google Cloud Secret Manager client library version -->
+        <google-cloud-secretmanager.version>2.25.0</google-cloud-secretmanager.version>
     </properties>
 
     <dependencies>
+        <!-- Google Cloud Storage SDK — replaces hard-coded local file paths (cr-java-0061) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Session Data Redis — stores HTTP session state in
+             GCP Memorystore for Redis, enabling stateless horizontal scaling.
+             Replaces javax.servlet.http.HttpSession with distributed RedisTemplate. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- Google Cloud Storage SDK — replaces hard-coded local file paths (cr-java-0061) -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-storage</artifactId>
+            <version>${google-cloud-storage.version}</version>
+        </dependency>
+        <!-- cr-java-0069 FIX: Spring Cloud GCP Secret Manager starter.
+             Enables the sm:// property source so that @Value("${app.db.username}")
+             and @Value("${app.db.password}") are resolved from Google Secret Manager
+             at application startup — no credentials in source code or container images. -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>spring-cloud-gcp-starter-secretmanager</artifactId>
+            <version>${spring-cloud-gcp.version}</version>
+        </dependency>
+        <!-- cr-java-0090 FIX: Google Cloud Secret Manager client library.
+             Provides SecretManagerServiceClient used in BookingService to retrieve
+             the HMAC signing key for cloud-native confirmation-code generation,
+             replacing the local MD5-based file-based authentication token pattern. -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-secretmanager</artifactId>
+            <version>${google-cloud-secretmanager.version}</version>
+        </dependency>
+        <!-- Spring Cloud Context — required by Spring Cloud GCP Secret Manager bootstrap -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-bootstrap</artifactId>
+            <version>3.1.7</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
