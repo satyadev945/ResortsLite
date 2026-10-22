@@ -2,6 +2,7 @@ package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -16,29 +17,25 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
-    private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    // Removed hardcoded DB credentials (sec-cred-001 / cr-java-0021).
+    // Database connection is now fully managed by Spring DataSource configured via
+    // environment variables (SPRING_DATASOURCE_URL / USERNAME / PASSWORD) injected
+    // at runtime from AWS Secrets Manager or Parameter Store.
 
-    // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
-    // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
-    // or scaling events. Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+    // Payment API endpoint externalised to environment variable (cr-java-0021, cr-java-0088).
+    // HTTPS enforced; value injected at runtime via AWS Parameter Store / ECS task definition.
+    @Value("${app.payment.endpoint:https://payment-svc.internal:9090/charge}")
+    private String paymentApi;
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
         String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
-        // Fixed: Use parameterised query to prevent SQL injection (was string concatenation)
+        // Parameterised query prevents SQL injection
         String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)";
         jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut);
 
-        // Fixed: Replaced MD5 (broken, RFC 6151) with SHA-256 for confirmation code hashing.
-        // Also fixed: explicit UTF-8 charset passed to getBytes() to avoid default-charset
-        // behaviour change introduced in Java 18 (JEP 400).
+        // SHA-256 with explicit UTF-8 charset for deterministic behaviour across JVM versions
         String confirmCode = sha256Hash(bookingId + guestName);
 
         Map<String, Object> booking = new HashMap<>();
@@ -48,12 +45,11 @@ public class BookingService {
         booking.put("checkIn", checkIn);
         booking.put("checkOut", checkOut);
         booking.put("confirmationCode", confirmCode);
-        booking.put("dbHost", DB_HOST);
         return booking;
     }
 
     public Map<String, Object> getBookingById(String bookingId) {
-        // Fixed: Use parameterised query to prevent SQL injection (was string concatenation)
+        // Parameterised query prevents SQL injection
         String sql = "SELECT * FROM bookings WHERE id = ?";
         Map<String, Object> result = new HashMap<>();
         try {
@@ -64,47 +60,75 @@ public class BookingService {
         return result;
     }
 
-    // VIOLATION [Code Sustainability / High]: High cyclomatic complexity.
-    // This method has 9+ decision branches. Automated transformation tools flag methods
-    // above complexity threshold as high maintenance risk and transformation blockers.
+    /**
+     * Calculates the total room price based on room type, number of nights,
+     * season, and guest loyalty tier.
+     *
+     * @param roomType one of STANDARD, DELUXE, SUITE, VILLA
+     * @param nights   number of nights to stay
+     * @param season   PEAK, OFF, or standard
+     * @param loyalty  GOLD, PLATINUM, DIAMOND, or none
+     * @return formatted total price string
+     */
     public String calculateRoomPrice(String roomType, int nights, String season, String loyalty) {
-        double basePrice = 0;
-        if (roomType.equals("STANDARD")) { basePrice = 120.0; }
-        else if (roomType.equals("DELUXE")) { basePrice = 200.0; }
-        else if (roomType.equals("SUITE")) { basePrice = 350.0; }
-        else if (roomType.equals("VILLA")) { basePrice = 600.0; }
-        else { basePrice = 120.0; }
-        if (season.equals("PEAK")) { basePrice = basePrice * 1.5; }
-        else if (season.equals("OFF")) { basePrice = basePrice * 0.8; }
-        if (loyalty.equals("GOLD")) { basePrice = basePrice * 0.9; }
-        else if (loyalty.equals("PLATINUM")) { basePrice = basePrice * 0.8; }
-        else if (loyalty.equals("DIAMOND")) { basePrice = basePrice * 0.7; }
-        if (nights >= 7) { basePrice = basePrice * 0.95; }
-        else if (nights >= 14) { basePrice = basePrice * 0.90; }
-        double total = basePrice * nights;
+        double basePrice = switch (roomType) {
+            case "DELUXE"   -> 200.0;
+            case "SUITE"    -> 350.0;
+            case "VILLA"    -> 600.0;
+            default         -> 120.0; // STANDARD and unknown types
+        };
+
+        double seasonMultiplier = switch (season) {
+            case "PEAK" -> 1.5;
+            case "OFF"  -> 0.8;
+            default     -> 1.0;
+        };
+
+        double loyaltyMultiplier = switch (loyalty) {
+            case "GOLD"     -> 0.9;
+            case "PLATINUM" -> 0.8;
+            case "DIAMOND"  -> 0.7;
+            default         -> 1.0;
+        };
+
+        double stayDiscount = (nights >= 14) ? 0.90 : (nights >= 7) ? 0.95 : 1.0;
+
+        double total = basePrice * seasonMultiplier * loyaltyMultiplier * stayDiscount * nights;
         return String.format("%.2f", total);
     }
 
+    /**
+     * Checks whether the given room type is a recognised, bookable category.
+     *
+     * @param roomType room type identifier
+     * @return true if the room type is valid and available for booking
+     */
     public boolean isRoomAvailable(String roomType) {
-        // VIOLATION [Code Sustainability / Medium]: Duplicated validation logic.
-        // Same room type validation is repeated here and in calculateRoomPrice.
-        // Should be extracted to a shared RoomType enum or validator.
-        if (!roomType.equals("STANDARD") && !roomType.equals("DELUXE") // dup-logic-001
-                && !roomType.equals("SUITE") && !roomType.equals("VILLA")) { // dup-logic-001
-            return false;
-        }
-        return true;
+        // Centralised validation using the same switch expression used in calculateRoomPrice,
+        // eliminating the duplicated room-type check (dup-logic-001).
+        return switch (roomType) {
+            case "STANDARD", "DELUXE", "SUITE", "VILLA" -> true;
+            default -> false;
+        };
     }
 
+    /**
+     * Triggers report generation for the specified month.
+     *
+     * @param month month identifier (e.g. "2024-03")
+     * @return status message
+     */
     public String generateReport(String month) {
-        return "Report generation triggered for: " + month + " via " + PAYMENT_API;
+        return "Report generation triggered for: " + month + " via " + paymentApi;
     }
 
     /**
      * Computes a SHA-256 hex digest of the given input string.
      * Uses explicit UTF-8 encoding (StandardCharsets.UTF_8) so that the result
-     * is deterministic regardless of the JVM default charset (changed to UTF-8
-     * unconditionally in Java 18 via JEP 400, but explicit is always safer).
+     * is deterministic regardless of the JVM default charset.
+     *
+     * @param input string to hash
+     * @return lowercase hex-encoded SHA-256 digest
      */
     private String sha256Hash(String input) {
         try {

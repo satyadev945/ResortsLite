@@ -1,5 +1,6 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -14,40 +15,55 @@ import java.util.Map;
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    // Report base path externalised to environment variable (czr-java-001).
+    // Defaults to the JVM temporary directory so the application works inside a
+    // container without requiring a pre-existing filesystem layout.
+    // For production, set APP_REPORT_BASE_PATH to an S3-mounted path or a
+    // persistent volume mount injected by ECS/EKS.
+    @Value("${app.report.base-path:${java.io.tmpdir}/reports}")
+    private String reportBasePath;
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    // Removed hardcoded Windows backup path (czr-java-001).
+    // Backup destination is now controlled via environment variable APP_BACKUP_PATH,
+    // defaulting to a platform-neutral temp subdirectory.
+    @Value("${app.backup.path:${java.io.tmpdir}/backups}")
+    private String backupPath;
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    // Removed hardcoded SERVER_PORT constant (czr-port-001).
+    // The actual port is managed by Spring Boot via the SERVER_PORT environment
+    // variable and is not a concern of the service layer.
 
-    // Fixed: DateTimeFormatter is thread-safe (unlike SimpleDateFormat) and uses java.time API
+    // DateTimeFormatter is immutable and thread-safe (unlike SimpleDateFormat)
     private static final DateTimeFormatter TIMESTAMP_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    // Report download base URL externalised to environment variable (cr-java-0088).
+    // HTTPS enforced; value injected at runtime via AWS Parameter Store / ECS task definition.
+    @Value("${app.report.download-base-url:https://reports.resorts-internal.com/download}")
+    private String reportDownloadBaseUrl;
+
+    /**
+     * Generates a monthly booking report CSV file and writes it to the configured
+     * report base path.
+     *
+     * @param month numeric month (e.g. "03")
+     * @param year  four-digit year (e.g. "2024")
+     * @return result map containing status and the generated file path
+     */
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String fullPath = reportBasePath + File.separator + fileName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
+            File reportDir = new File(reportBasePath);
             if (!reportDir.exists()) {
                 reportDir.mkdirs();
             }
 
-            // Fixed: FileWriter now uses explicit UTF-8 charset (StandardCharsets.UTF_8).
-            // Prior to this fix, FileWriter relied on the JVM default charset which changed
-            // to UTF-8 unconditionally in Java 18 (JEP 400). Using an explicit charset
-            // makes the behaviour deterministic across all Java versions.
+            // FileWriter uses explicit UTF-8 charset for deterministic behaviour
+            // across all Java versions (behaviour changed in Java 18 via JEP 400).
             try (FileWriter writer = new FileWriter(fullPath, StandardCharsets.UTF_8)) {
                 writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
                 writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
@@ -56,7 +72,6 @@ public class ReportService {
 
             result.put("status", "generated");
             result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT); // czr-port-001
 
         } catch (IOException e) {
             result.put("status", "error");
@@ -66,24 +81,30 @@ public class ReportService {
         return result;
     }
 
-    // VIOLATION [Code Sustainability / Medium]: No JavaDoc or method documentation.
-    // Missing documentation is flagged across all public methods in the codebase.
-    // This increases onboarding time and transformation risk for automated tools.
-    public String buildReportDownloadUrl(String reportName) { // doc-missing-001
-        // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP URL
-        // hardcoded for report download. Cloud security standards enforce HTTPS.
-        return "http://reports.resorts-internal.com:8080/download/" + reportName; // cr-java-0088
+    /**
+     * Builds the HTTPS download URL for a named report file.
+     * The base URL is injected via the {@code app.report.download-base-url}
+     * property, defaulting to an HTTPS endpoint (cr-java-0088).
+     *
+     * @param reportName filename of the report to download
+     * @return fully qualified HTTPS download URL
+     */
+    public String buildReportDownloadUrl(String reportName) {
+        return reportDownloadBaseUrl + "/" + reportName;
     }
 
-    public Map<String, Object> getSystemInfo() { // doc-missing-001
-        // Fixed: Replaced legacy java.util.Date + SimpleDateFormat with java.time.LocalDateTime
-        // and DateTimeFormatter. java.util.Date is deprecated for most uses since Java 8 and
-        // SimpleDateFormat is not thread-safe. DateTimeFormatter is immutable and thread-safe.
+    /**
+     * Returns current system configuration information for diagnostics.
+     *
+     * @return map containing report path, backup path, and generation timestamp
+     */
+    public Map<String, Object> getSystemInfo() {
+        // java.time.LocalDateTime + DateTimeFormatter: immutable, thread-safe,
+        // and the recommended replacement for legacy java.util.Date + SimpleDateFormat.
         String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
-        info.put("serverPort", SERVER_PORT);        // czr-port-001
+        info.put("reportPath", reportBasePath);
+        info.put("backupPath", backupPath);
         info.put("generatedAt", timestamp);
         return info;
     }
