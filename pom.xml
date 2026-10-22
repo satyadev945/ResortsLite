@@ -34,6 +34,24 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
+        <!--
+            cr-java-0065 FIX: Spring Session with Amazon ElastiCache for Redis.
+            spring-session-data-redis replaces the in-process HttpSession store with a
+            centralized Redis-backed session store. When combined with @EnableRedisHttpSession
+            (see RedisSessionConfig), all session attributes are transparently serialised to
+            the ElastiCache cluster, enabling stateless application instances that support
+            AWS ALB load balancing, horizontal auto-scaling, and zero-downtime failover.
+            spring-boot-starter-data-redis provides the Lettuce Redis client and
+            RedisConnectionFactory auto-configuration wired to the ElastiCache endpoint.
+        -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
         <!-- SECURITY VIOLATION: log4j 2.14.1 has critical CVE-2021-44228 (Log4Shell) -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
@@ -66,6 +84,34 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- AWS SDK v2 S3 — replaces hard-coded file-path storage (cr-java-0061) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.25.60</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>regions</artifactId>
+            <version>2.25.60</version>
+        </dependency>
+        <!-- AWS Secrets Manager SDK — replaces hard-coded DB credentials (cr-java-0069) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+            <version>2.25.60</version>
+        </dependency>
+        <!-- Jackson Databind — used to parse the Secrets Manager JSON payload -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- AWS SDK v2 SSM — retrieves environment URLs from Parameter Store (cr-java-0071) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssm</artifactId>
+            <version>2.25.60</version>
         </dependency>
     </dependencies>
 

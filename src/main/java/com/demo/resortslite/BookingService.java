@@ -4,6 +4,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
+import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
+import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueResponse;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
@@ -15,17 +22,75 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
+    // cr-java-0069 FIX: DB_USER and DB_PASS are no longer hard-coded.
+    // Credentials are retrieved at runtime from AWS Secrets Manager using the
+    // secret name supplied via the DB_SECRET_NAME environment variable.
+    // The DB_HOST is still externalised via environment variable (cr-java-0021).
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    private final String DB_USER;
+    private final String DB_PASS;
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
     private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+
+    /**
+     * Constructor that fetches database credentials from AWS Secrets Manager.
+     *
+     * The secret identified by the environment variable DB_SECRET_NAME must be a
+     * JSON object with at least the keys "username" and "password", for example:
+     *   {"username":"admin","password":"Resort$Pass#2019!"}
+     *
+     * The AWS region is read from the environment variable AWS_REGION (defaults to
+     * "us-east-1" when not set).  IAM permissions required:
+     *   secretsmanager:GetSecretValue on the target secret ARN.
+     */
+    public BookingService() {
+        String secretName = System.getenv("DB_SECRET_NAME");
+        if (secretName == null || secretName.isEmpty()) {
+            secretName = "resortslite/db/credentials"; // sensible default secret name
+        }
+
+        String awsRegion = System.getenv("AWS_REGION");
+        if (awsRegion == null || awsRegion.isEmpty()) {
+            awsRegion = "us-east-1";
+        }
+
+        String resolvedUser = "";
+        String resolvedPass = "";
+
+        try {
+            SecretsManagerClient client = SecretsManagerClient.builder()
+                    .region(Region.of(awsRegion))
+                    .build();
+
+            GetSecretValueRequest request = GetSecretValueRequest.builder()
+                    .secretId(secretName)
+                    .build();
+
+            GetSecretValueResponse response = client.getSecretValue(request);
+            String secretString = response.secretString();
+
+            // Parse the JSON secret payload to extract username and password
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode secretJson = mapper.readTree(secretString);
+            resolvedUser = secretJson.has("username") ? secretJson.get("username").asText() : "";
+            resolvedPass = secretJson.has("password") ? secretJson.get("password").asText() : "";
+
+            client.close();
+        } catch (Exception e) {
+            // Log the error without exposing credential values; application startup
+            // will fail fast if credentials cannot be resolved.
+            throw new IllegalStateException(
+                    "Failed to retrieve database credentials from AWS Secrets Manager "
+                    + "(secret: " + secretName + ", region: " + awsRegion + "): "
+                    + e.getMessage(), e);
+        }
+
+        this.DB_USER = resolvedUser;
+        this.DB_PASS = resolvedPass;
+    }
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
