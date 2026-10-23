@@ -67,6 +67,62 @@
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- AWS SDK v2 for S3 — replaces hard-coded file-path storage (cr-java-0061) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.25.60</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>regions</artifactId>
+            <version>2.25.60</version>
+        </dependency>
+        <!-- cr-java-0069 FIX: AWS Secrets Manager SDK for retrieving DB credentials at runtime -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+            <version>2.25.60</version>
+        </dependency>
+        <!-- Jackson for parsing Secrets Manager JSON secret values -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- cr-java-0071 FIX: AWS Systems Manager Parameter Store SDK for retrieving hard-coded environment URLs -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssm</artifactId>
+            <version>2.25.60</version>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Session Data Redis — stores HTTP session state in
+             Amazon ElastiCache for Redis instead of the local JVM heap.  Combined with
+             spring.session.store-type=redis in application.properties, Spring Session's
+             SessionRepositoryFilter transparently intercepts all session operations and
+             persists them to the shared Redis cluster, enabling stateless EC2 instances
+             and true horizontal scaling without ALB sticky sessions. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+            <version>2.7.4</version>
+        </dependency>
+        <!-- Lettuce is the recommended non-blocking Redis client for Spring Session.
+             It is thread-safe and works well with Spring Boot's auto-configuration. -->
+        <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+            <version>6.2.7.RELEASE</version>
+        </dependency>
+        <!-- cr-java-0067 FIX: Spring Boot Starter Data Redis provides RedisTemplate
+             for storing booking cache entries in Amazon ElastiCache for Redis with TTL.
+             This replaces the former unbounded in-memory HashMap (bookingCache) that
+             caused indefinite memory growth, stale data, and cross-instance cache
+             inconsistency. RedisTemplate is auto-configured by Spring Boot when
+             spring.redis.host and spring.redis.port are set in application.properties. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
