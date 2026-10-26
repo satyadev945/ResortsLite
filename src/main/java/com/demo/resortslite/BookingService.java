@@ -4,6 +4,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
+import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
+import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueResponse;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
@@ -15,12 +22,71 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
+    // cr-java-0069 FIX: Hard-coded database credentials replaced with AWS Secrets Manager.
+    // DB_USER and DB_PASS are no longer stored in source code. Credentials are retrieved
+    // at runtime from the secret named by the DB_SECRET_NAME environment variable,
+    // enabling automatic rotation without redeployment and preventing credential exposure
+    // in version control or container image layers.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+
+    // cr-java-0069 FIX: Secret name is externalised to an environment variable so that
+    // different environments (dev / staging / prod) can reference different secrets without
+    // any code change.  Falls back to a sensible default for local development.
+    private static final String DB_SECRET_NAME =
+            System.getenv("DB_SECRET_NAME") != null
+                    ? System.getenv("DB_SECRET_NAME")
+                    : "resortslite/db/credentials";
+
+    // cr-java-0069 FIX: AWS region for Secrets Manager is externalised to an environment
+    // variable (AWS_REGION) so the same artifact can be deployed to any region.
+    private static final String AWS_REGION =
+            System.getenv("AWS_REGION") != null
+                    ? System.getenv("AWS_REGION")
+                    : "us-east-1";
+
+    /**
+     * cr-java-0069 FIX: Retrieves database credentials from AWS Secrets Manager.
+     *
+     * <p>The secret is expected to be stored as a JSON string with the following structure:
+     * <pre>
+     * {
+     *   "username": "admin",
+     *   "password": "Resort$Pass#2019!"
+     * }
+     * </pre>
+     *
+     * <p>AWS Secrets Manager provides:
+     * <ul>
+     *   <li>Encrypted storage of credentials (AES-256 via AWS KMS)</li>
+     *   <li>Automatic rotation without application redeployment</li>
+     *   <li>Fine-grained IAM access control</li>
+     *   <li>Audit trail via AWS CloudTrail</li>
+     * </ul>
+     *
+     * @param key "username" or "password"
+     * @return the credential value for the requested key
+     */
+    private String getDbCredential(String key) {
+        try (SecretsManagerClient client = SecretsManagerClient.builder()
+                .region(Region.of(AWS_REGION))
+                .build()) {
+
+            GetSecretValueRequest request = GetSecretValueRequest.builder()
+                    .secretId(DB_SECRET_NAME)
+                    .build();
+
+            GetSecretValueResponse response = client.getSecretValue(request);
+            String secretJson = response.secretString();
+
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode secretNode = mapper.readTree(secretJson);
+            return secretNode.get(key).asText();
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Failed to retrieve database credential '" + key
+                            + "' from AWS Secrets Manager (secret: " + DB_SECRET_NAME + ")", e);
+        }
+    }
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,

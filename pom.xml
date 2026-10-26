@@ -19,9 +19,30 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <!-- AWS SDK v2 BOM version — manages all aws-sdk-java-v2 module versions -->
+        <aws.sdk.version>2.25.40</aws.sdk.version>
     </properties>
 
     <dependencies>
+        <!-- cr-java-0061 FIX: AWS SDK v2 S3 client to replace hardcoded file-path operations -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssm</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <!-- cr-java-0071 FIX: AWS SDK v2 SSM client to retrieve environment-specific URLs from Parameter Store -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <!-- cr-java-0069 FIX: AWS Secrets Manager SDK to replace hard-coded DB credentials -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -67,6 +88,24 @@
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
         </dependency>
+
+        <!-- cr-java-0065 FIX: Spring Session with Redis backend — replaces in-process
+             HttpSession storage with Amazon ElastiCache for Redis, enabling stateless
+             application instances and distributed session management across all EC2
+             instances / ECS tasks behind the AWS ALB. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+
+        <!-- cr-java-0065 FIX: Spring Boot Redis starter — provides the Lettuce connection
+             pool and auto-configuration that connects to the ElastiCache primary endpoint
+             specified by SPRING_REDIS_HOST / SPRING_REDIS_PORT environment variables. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>
