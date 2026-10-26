@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resortslite
+  namespace: resortslite
+  labels:
+    app: resortslite
+    version: "1.0.0"
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: resortslite
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: resortslite
+        version: "1.0.0"
+    spec:
+      # Use IRSA (IAM Roles for Service Accounts) for credential-free AWS access
+      serviceAccountName: resortslite-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: resortslite
+          image: "{{IMAGE_URI}}"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # Spring profile
+            - name: SPRING_PROFILES_ACTIVE
+              value: "docker"
+
+            # JVM options
+            - name: JAVA_OPTS
+              value: "-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UnlockExperimentalVMOptions -Djava.security.egd=file:/dev/./urandom"
+
+            # Oracle datasource — inject via Kubernetes Secret
+            - name: SPRING_DATASOURCE_URL
+              value: "{{SPRING_DATASOURCE_URL}}"
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: resortslite-db-secret
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: resortslite-db-secret
+                  key: password
+
+            # Redis / Amazon ElastiCache — inject via ConfigMap / Secret
+            - name: REDIS_HOST
+              value: "{{REDIS_HOST}}"
+            - name: REDIS_PORT
+              value: "{{REDIS_PORT}}"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: resortslite-redis-secret
+                  key: password
+                  optional: true
+            - name: REDIS_SSL
+              value: "{{REDIS_SSL}}"
+
+            # Session configuration
+            - name: SESSION_TIMEOUT_SECONDS
+              value: "1800"
+
+            # Booking cache TTL
+            - name: BOOKING_CACHE_TTL_SECONDS
+              value: "3600"
+
+            # Payment API URL
+            - name: PAYMENT_API_URL
+              value: "{{PAYMENT_API_URL}}"
+
+            # File paths (backed by PersistentVolumeClaims or EFS)
+            - name: REPORT_BASE_PATH
+              value: "/var/reports"
+            - name: BACKUP_PATH
+              value: "/var/backups"
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          volumeMounts:
+            - name: reports-volume
+              mountPath: /var/reports
+            - name: backups-volume
+              mountPath: /var/backups
+
+      volumes:
+        - name: reports-volume
+          emptyDir: {}
+        - name: backups-volume
+          emptyDir: {}
+
+      terminationGracePeriodSeconds: 60

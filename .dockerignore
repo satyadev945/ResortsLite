@@ -1,0 +1,67 @@
+# Java / Maven build artifacts
+target/
+*.jar
+*.war
+*.ear
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# IDE / editor files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+*.swp
+*.swo
+
+# OS artefacts
+.DS_Store
+Thumbs.db
+
+# Maven wrapper — NEVER copy into Docker image; use system mvn instead
+mvnw
+mvnw.cmd
+.mvn/
+
+# Gradle wrapper — NEVER copy into Docker image; use system gradle instead
+gradlew
+gradlew.bat
+gradle/wrapper/
+gradle/
+
+# Test reports and coverage
+**/surefire-reports/
+**/failsafe-reports/
+**/jacoco/
+
+# Logs
+*.log
+logs/
+
+# Environment / secrets
+.env
+*.env
+*.env.*
+
+# Docker artefacts
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Scripts (not needed inside the image)
+scripts/
