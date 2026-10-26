@@ -23,9 +23,14 @@ class ResortsLiteApplicationTest {
 
     /**
      * Verifies that the main() entry-point can be invoked without throwing.
+     * Uses the test profile to ensure H2 in-memory DB is used instead of Oracle.
      */
     @Test
     void main_doesNotThrow() {
-        assertDoesNotThrow(() -> ResortsLiteApplication.main(new String[]{}));
+        // Pass the test profile so Spring Boot uses H2 (application-test.properties)
+        // instead of the production Oracle datasource (application.properties)
+        assertDoesNotThrow(() ->
+            ResortsLiteApplication.main(new String[]{"--spring.profiles.active=test",
+                "--spring.main.web-application-type=none"}));
     }
 }
