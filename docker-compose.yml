@@ -13,8 +13,8 @@ services:
       # Spring profile
       SPRING_PROFILES_ACTIVE: docker
 
-      # Oracle Database connection (provide via .env or environment)
-      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:oracle:thin:@<DB_HOST>:1521:<DB_SID>}
+      # PostgreSQL Database connection (provide via .env or environment)
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://<DB_HOST>:5432/<DB_NAME>}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-admin}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-changeme}
 

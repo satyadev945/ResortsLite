@@ -37,7 +37,7 @@ spec:
             - name: SPRING_PROFILES_ACTIVE
               value: "docker"
 
-            # Oracle Database
+            # PostgreSQL Database
             - name: SPRING_DATASOURCE_URL
               value: "{{SPRING_DATASOURCE_URL}}"
             - name: SPRING_DATASOURCE_USERNAME
