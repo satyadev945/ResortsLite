@@ -11,6 +11,18 @@
         <version>2.7.18</version>
     </parent>
 
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>2.25.11</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <groupId>com.demo</groupId>
     <artifactId>resortsLite</artifactId>
     <version>1.0.0</version>
@@ -66,6 +78,39 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- AWS SDK v2 S3 — replaces hard-coded file paths (cr-java-0061) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+        </dependency>
+        <!-- cr-java-0069 fix: AWS Secrets Manager client for externalized DB credentials -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+        </dependency>
+        <!-- cr-java-0071 fix: AWS SSM Parameter Store client for externalized environment URLs -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssm</artifactId>
+        </dependency>
+        <!-- cr-java-0065 fix: Spring Session backed by Amazon ElastiCache for Redis.
+             Replaces instance-local HttpSession storage with a shared, distributed
+             session store so all cluster nodes read/write the same session data.
+             spring-session-data-redis transparently intercepts the standard
+             HttpSession API — no application code changes are needed beyond
+             adding this dependency and the Redis connection properties. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
     </dependencies>
 
