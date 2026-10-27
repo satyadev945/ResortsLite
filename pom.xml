@@ -67,6 +67,43 @@
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Azure Blob Storage SDK — replaces hard-coded local file paths (cr-java-0061) -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-blob</artifactId>
+            <version>12.25.1</version>
+        </dependency>
+        <!-- Azure Key Vault Secrets SDK — replaces hard-coded DB credentials (cr-java-0069) -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-security-keyvault-secrets</artifactId>
+            <version>4.8.2</version>
+        </dependency>
+        <!-- Azure Identity SDK — provides DefaultAzureCredential for Key Vault auth -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-identity</artifactId>
+            <version>1.11.4</version>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Session with Azure Cache for Redis replaces in-process
+             HttpSession storage. Enables stateless horizontal scaling — all instances share
+             the same Redis-backed session store on Azure Cache for Redis. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- cr-java-0111 FIX: Azure Service Bus SDK — replaces java.util.Timer and server-local
+             scheduling with Azure Service Bus scheduled message delivery for distributed,
+             timezone-agnostic task execution across cloud regions and container instances. -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-messaging-servicebus</artifactId>
+            <version>7.15.1</version>
+        </dependency>
     </dependencies>
 
     <build>

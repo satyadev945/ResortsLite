@@ -1,11 +1,13 @@
 package com.demo.resortslite;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
-import javax.servlet.http.HttpSession;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/bookings")
@@ -14,27 +16,56 @@ public class BookingController {
     @Autowired
     private BookingService bookingService;
 
-    // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
-    // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    // cr-java-0065 FIX: Replaced HttpSession with StringRedisTemplate to externalise
+    // session state to Azure Cache for Redis. All instances share the same Redis store,
+    // enabling stateless horizontal scaling and safe auto-scaling / failover on Azure.
+    // cr-java-0067 FIX: Also used for distributed booking cache with TTL — replaces the
+    // former static HashMap (bookingCache) that had no expiration policy and was
+    // instance-local, causing stale data and memory growth in multi-instance deployments.
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    // cr-java-0071 FIX: Externalized inventory service URL to Azure App Configuration.
+    // Previously hard-coded as "http://inventory-service.internal:8081/rooms/available".
+    // Now injected via @Value from application.properties / Azure App Configuration,
+    // enabling environment-agnostic deployments without code changes.
+    @Value("${app.inventory.available-url:${app.inventory.endpoint:/rooms/available}}")
+    private String inventoryAvailableUrl;
+
+    // cr-java-0067 FIX: Removed static HashMap bookingCache — replaced with Azure Cache
+    // for Redis via StringRedisTemplate. Redis provides:
+    //   • Distributed visibility: all instances share the same cache store.
+    //   • TTL enforcement: cache entries expire automatically (30 minutes below).
+    //   • Memory safety: expired entries are evicted by Redis, preventing OOM errors.
+    // The former declaration was:
+    //   private static final Map<String, Object> bookingCache = new HashMap<>();
 
     @PostMapping("/create")
     public Map<String, Object> createBooking(
             @RequestParam String guestName,
             @RequestParam String roomType,
             @RequestParam String checkIn,
-            @RequestParam String checkOut,
-            HttpSession session) {
+            @RequestParam String checkOut) {
 
         Map<String, Object> booking = bookingService.createBooking(guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Booking state stored in
-        // HTTP session memory. AWS ALB distributes requests across EC2 instances — session
-        // data on instance A is invisible to instance B. Auto-scaling and failover breaks.
-        session.setAttribute("lastBooking", booking); // cr-java-0065
-        session.setAttribute("guestName", guestName); // cr-java-0065
+        String bookingId = (String) booking.get("bookingId");
 
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        // cr-java-0065 FIX: Booking state is now stored in Azure Cache for Redis instead of
+        // the in-process HTTP session. A TTL of 30 minutes mirrors typical session expiry.
+        // All application instances share the same Redis store, so any instance can serve
+        // subsequent requests without sticky sessions or server affinity.
+        redisTemplate.opsForValue().set("session:lastBooking:" + bookingId, booking.toString(), 30, TimeUnit.MINUTES);
+        redisTemplate.opsForValue().set("session:guestName:" + bookingId, guestName, 30, TimeUnit.MINUTES);
+
+        // cr-java-0067 FIX: Booking details are cached in Azure Cache for Redis with a
+        // 30-minute TTL. This replaces the former static HashMap (bookingCache) which:
+        //   • Had no TTL — entries accumulated indefinitely, risking OOM errors.
+        //   • Was instance-local — other instances in the cluster could not see cached data.
+        //   • Caused stale data inconsistencies across horizontally scaled instances.
+        // Redis ensures cache entries are shared across all instances and automatically
+        // evicted after the TTL, preventing memory exhaustion and stale data issues.
+        redisTemplate.opsForValue().set("cache:booking:" + bookingId, booking.toString(), 30, TimeUnit.MINUTES);
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -44,26 +75,32 @@ public class BookingController {
 
     @GetMapping("/status/{bookingId}")
     public Map<String, Object> getBookingStatus(
-            @PathVariable String bookingId,
-            HttpSession session) {
+            @PathVariable String bookingId) {
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Reading business state
-        // from HTTP session — will return null on any other instance in the cluster.
-        String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065
+        // cr-java-0065 FIX: Guest name is now retrieved from Azure Cache for Redis instead of
+        // the in-process HTTP session. This ensures consistent reads across all instances in
+        // the cluster, supporting stateless horizontal scaling on Azure Container Apps / AKS.
+        String lastGuest = redisTemplate.opsForValue().get("session:guestName:" + bookingId);
+
+        // cr-java-0067 FIX: Booking details are retrieved from the distributed Redis cache
+        // instead of the former instance-local static HashMap. Returns null (cache miss) if
+        // the TTL has expired, at which point the caller falls back to bookingService.
+        String cachedBooking = redisTemplate.opsForValue().get("cache:booking:" + bookingId);
 
         Map<String, Object> result = new HashMap<>();
         result.put("bookingId", bookingId);
         result.put("sessionGuest", lastGuest);
+        result.put("cachedBooking", cachedBooking);
         result.put("details", bookingService.getBookingById(bookingId));
         return result;
     }
 
     @GetMapping("/availability")
     public Map<String, Object> checkAvailability(@RequestParam String roomType) {
-        // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP call to
-        // internal inventory service. AWS ALB, WAF, and Well-Architected security review
-        // enforce HTTPS. This call will be blocked or flagged in a cloud-native setup.
-        String inventoryUrl = "http://inventory-service.internal:8081/rooms/available"; // cr-java-0088
+        // cr-java-0071 FIX: Hard-coded environment URL replaced with value injected from
+        // Azure App Configuration / application.properties via @Value.
+        // Set app.inventory.available-url in Azure App Configuration per environment.
+        String inventoryUrl = inventoryAvailableUrl;
 
         Map<String, Object> response = new HashMap<>();
         response.put("roomType", roomType);

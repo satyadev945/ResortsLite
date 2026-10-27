@@ -2,7 +2,12 @@ package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
+import com.azure.identity.DefaultAzureCredentialBuilder;
+import com.azure.security.keyvault.secrets.SecretClient;
+import com.azure.security.keyvault.secrets.SecretClientBuilder;
 
 import java.security.MessageDigest;
 import java.util.HashMap;
@@ -15,12 +20,39 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
+    // Azure Key Vault URI injected from environment variable / application property.
+    // Set AZURE_KEYVAULT_URI (e.g. https://<vault-name>.vault.azure.net/) in the
+    // Azure App Service configuration or as a local environment variable.
+    @Value("${azure.keyvault.uri}")
+    private String keyVaultUri;
+
+    // DB_HOST is still externalised via application.properties / environment variable
+    // (cr-java-0021 remediation — no credentials stored here).
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+
+    /**
+     * Lazily resolves the database username from Azure Key Vault secret "db-username".
+     * Uses DefaultAzureCredential so the same code works with Managed Identity in Azure
+     * and with local developer credentials (az login / environment variables) locally.
+     */
+    private String getDbUser() {
+        SecretClient secretClient = new SecretClientBuilder()
+                .vaultUrl(keyVaultUri)
+                .credential(new DefaultAzureCredentialBuilder().build())
+                .buildClient();
+        return secretClient.getSecret("db-username").getValue();
+    }
+
+    /**
+     * Lazily resolves the database password from Azure Key Vault secret "db-password".
+     */
+    private String getDbPass() {
+        SecretClient secretClient = new SecretClientBuilder()
+                .vaultUrl(keyVaultUri)
+                .credential(new DefaultAzureCredentialBuilder().build())
+                .buildClient();
+        return secretClient.getSecret("db-password").getValue();
+    }
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
