@@ -2,6 +2,7 @@ package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
@@ -22,10 +23,11 @@ public class BookingService {
     private static final String DB_USER = "admin";                         // sec-cred-001
     private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
 
-    // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
-    // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
-    // or scaling events. Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+    // cz-java-0062 [Network & Port Binding]: Hardcoded IP address replaced with environment
+    // variable. Use PAYMENT_API_URL env var (or Kubernetes ConfigMap) to supply the
+    // cluster-internal DNS service name at runtime (e.g. http://payment-svc:9090/payments/charge).
+    @Value("${PAYMENT_API_URL:http://payment-svc:9090/payments/charge}")
+    private String PAYMENT_API; // cz-java-0062: externalized via env var / Kubernetes ConfigMap
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
