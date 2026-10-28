@@ -28,6 +28,22 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- cz-java-0063: Spring Session backed by Amazon ElastiCache (Redis) -->
+        <!-- Replaces in-memory HttpSession with externalized Redis session store -->
+        <!-- enabling stateless horizontal scaling on EKS -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- cz-java-0063: Spring Data Redis + Lettuce client for ElastiCache connectivity -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
         <dependency>
