@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  resortslite:
+    image: resortslite:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resortslite-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Spring profile
+      SPRING_PROFILES_ACTIVE: docker
+      # Datasource — supply real values at runtime or via .env file
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:oracle:thin:@<DB_HOST>:1521:<DB_SID>}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-admin}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-changeme}
+      # Redis / ElastiCache
+      REDIS_HOST: ${REDIS_HOST:-localhost}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # Internal service endpoints
+      PAYMENT_API_URL: ${PAYMENT_API_URL:-http://payment-svc:9090/payments/charge}
+      # Report storage path
+      REPORT_BASE_PATH: ${REPORT_BASE_PATH:-/var/app/reports/}
+      # JVM options
+      JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+    volumes:
+      - reports-data:/var/app/reports
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  reports-data:
+
+networks:
+  app-network:
+    driver: bridge
