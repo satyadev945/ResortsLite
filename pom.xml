@@ -11,6 +11,18 @@
         <version>2.7.18</version>
     </parent>
 
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>2.25.11</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <groupId>com.demo</groupId>
     <artifactId>resortsLite</artifactId>
     <version>1.0.0</version>
@@ -66,6 +78,42 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- AWS SDK v2 S3 — replaces hard-coded file paths (cr-java-0061) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+        </dependency>
+        <!-- AWS Secrets Manager SDK v2 — replaces hard-coded DB credentials (cr-java-0069) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+        </dependency>
+        <!-- AWS SSM Parameter Store SDK v2 — externalises hard-coded environment URLs (cr-java-0071) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssm</artifactId>
+        </dependency>
+        <!-- Jackson for parsing Secrets Manager JSON response -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Session with Redis backend — all HttpSession data is
+             stored in Amazon ElastiCache for Redis, enabling stateless, horizontally scalable
+             application instances. No sticky sessions required on the AWS ALB. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- Spring Boot Redis / Lettuce client — required by Spring Session Redis -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
     </dependencies>
 
