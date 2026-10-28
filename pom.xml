@@ -47,6 +47,44 @@
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Azure Blob Storage SDK — replaces hard-coded file system paths (cr-java-0061) -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-blob</artifactId>
+            <version>12.25.1</version>
+        </dependency>
+        <!-- Azure Key Vault Secrets SDK — replaces hard-coded DB credentials (cr-java-0069) -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-security-keyvault-secrets</artifactId>
+            <version>4.8.2</version>
+        </dependency>
+        <!-- Azure Identity SDK — provides DefaultAzureCredential for Key Vault auth (cr-java-0069) -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-identity</artifactId>
+            <version>1.11.4</version>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Session with Redis — externalizes HTTP session state to
+             Azure Cache for Redis, enabling stateless horizontal scaling across multiple instances.
+             @EnableRedisHttpSession in BookingController transparently replaces the default
+             in-memory session store so all session.setAttribute/getAttribute calls use Redis. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- cr-java-0111 FIX: Azure Service Bus SDK — replaces java.util.Timer / server-local
+             scheduling with Azure Service Bus Scheduled Messages for distributed, timezone-agnostic
+             task delivery across multi-region / multi-instance cloud deployments. -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-messaging-servicebus</artifactId>
+            <version>7.15.1</version>
+        </dependency>
     </dependencies>
 
     <build>
