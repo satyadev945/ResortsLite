@@ -1,0 +1,56 @@
+# Java / Maven build artifacts
+target/
+*.jar
+*.war
+*.ear
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# IDE / editor files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+*.swp
+*.swo
+
+# OS artefacts
+.DS_Store
+Thumbs.db
+
+# Maven wrapper — NEVER copy into image; use system mvn
+mvnw
+mvnw.cmd
+.mvn/
+
+# Gradle wrapper — NEVER copy into image; use system gradle
+gradlew
+gradlew.bat
+gradle/wrapper/
+.gradle/
+
+# Test reports
+surefire-reports/
+failsafe-reports/
+
+# Logs
+logs/
+*.log
+
+# Environment files (may contain secrets)
+.env
+.env.*
+
+# Kubernetes / scripts (not needed in image)
+kubernetes/
+scripts/
