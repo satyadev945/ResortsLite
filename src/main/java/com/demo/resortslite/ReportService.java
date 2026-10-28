@@ -3,10 +3,13 @@ package com.demo.resortslite;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -39,11 +42,15 @@ public class ReportService {
                 reportDir.mkdirs();
             }
 
-            FileWriter writer = new FileWriter(fullPath);
-            writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
-            writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
-            writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
-            writer.close();
+            // Fixed: explicit UTF-8 charset — FileWriter without charset uses platform default
+            // which is non-deterministic on Java 21 (JEP 400 makes UTF-8 the default but
+            // explicit charset is required for portability and correctness).
+            try (Writer writer = new OutputStreamWriter(
+                    new FileOutputStream(fullPath), StandardCharsets.UTF_8)) {
+                writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
+                writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
+                writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
+            }
 
             result.put("status", "generated");
             result.put("path", fullPath);
@@ -67,7 +74,9 @@ public class ReportService {
     }
 
     public Map<String, Object> getSystemInfo() { // doc-missing-001
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        // Fixed: replaced legacy java.util.Date + SimpleDateFormat with java.time API
+        String timestamp = LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         Map<String, Object> info = new HashMap<>();
         info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
         info.put("backupPath", BACKUP_PATH);        // czr-java-001
