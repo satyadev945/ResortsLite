@@ -19,9 +19,36 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <!-- AWS SDK v2 BOM version — manages all aws-sdk-java-v2 module versions -->
+        <aws.sdk.version>2.25.40</aws.sdk.version>
     </properties>
 
     <dependencies>
+        <!-- cr-java-0061 FIX: AWS SDK v2 S3 client — replaces local file-system operations -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssm</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <!-- cr-java-0071 FIX: AWS SDK v2 SSM client — resolves externalized environment URLs
+             from AWS Systems Manager Parameter Store at runtime -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <!-- cr-java-0069 FIX: AWS Secrets Manager SDK v2 — replaces hard-coded DB credentials -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <!-- AWS SDK v2 URL connection client (lightweight HTTP client for SDK v2) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -66,6 +93,20 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- cr-java-0065 FIX: Spring Session with Redis backing store — replaces in-process
+             HttpSession storage with Amazon ElastiCache for Redis. All session attributes
+             (setAttribute / getAttribute) are transparently persisted to the shared Redis
+             cluster, enabling stateless application instances and horizontal scaling without
+             sticky sessions on the AWS ALB. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- Spring Data Redis — Lettuce-based Redis client used by Spring Session -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
     </dependencies>
 
