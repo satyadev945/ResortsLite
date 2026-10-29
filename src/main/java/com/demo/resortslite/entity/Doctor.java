@@ -1,18 +1,18 @@
 package com.demo.resortslite.entity;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.SequenceGenerator;
-import javax.persistence.Table;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.SequenceGenerator;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name="JPA_DOCTOR_INFO")
 public class Doctor {
 
-	@Column(name="DOC_ID")
+	@Column(name="DOC_ID", nullable = false)
 	@Id
 	//@GeneratedValue(strategy=GenerationType.AUTO)
 	@SequenceGenerator(name="gen1",sequenceName="CNO_SEQ",initialValue = 203,allocationSize = 1)
@@ -58,5 +58,10 @@ public class Doctor {
 
 	public void setIncome(Double income) {
 		this.income = income;
+	}
+
+	@Override
+	public String toString() {
+		return "Doctor{docId=" + docId + ", docName='" + docName + "', specialization='" + specialization + "', income=" + income + "}";
 	}
 }
