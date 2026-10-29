@@ -34,6 +34,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
+        <!-- PostgreSQL JDBC driver — replaces H2 in-memory database for PostgreSQL 16 compatibility -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.7.3</version>
+        </dependency>
         <!-- Updated log4j to 2.24.3 — fixes CVE-2021-44228 (Log4Shell) and Java 25 compatible -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
@@ -45,11 +51,6 @@
             <groupId>commons-collections</groupId>
             <artifactId>commons-collections</artifactId>
             <version>3.2.2</version>
-        </dependency>
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <scope>runtime</scope>
         </dependency>
     </dependencies>
 
