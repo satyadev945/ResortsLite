@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS bookings (
+    id VARCHAR(32) PRIMARY KEY,
+    guest VARCHAR(255) NOT NULL,
+    room VARCHAR(64) NOT NULL,
+    checkin VARCHAR(32) NOT NULL,
+    checkout VARCHAR(32) NOT NULL
+);
