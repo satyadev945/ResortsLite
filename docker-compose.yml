@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  test-comp1:
+    image: test-comp1:latest
+    container_name: test-comp1
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: 8080
+      JAVA_OPTS: "-Xmx512m -Xms256m -XX:+UnlockExperimentalVMOptions -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Dfile.encoding=UTF-8"
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:h2:mem:resortdb;DB_CLOSE_DELAY=-1}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-sa}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-}
+      PAYMENT_ENDPOINT: ${PAYMENT_ENDPOINT:-https://payment.example.internal/charge}
+      INVENTORY_ENDPOINT: ${INVENTORY_ENDPOINT:-https://inventory.example.internal/rooms}
+      NOTIFICATION_ENDPOINT: ${NOTIFICATION_ENDPOINT:-https://notify.example.internal/send}
+      REDIS_HOST: ${REDIS_HOST:-redis.example.internal}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SSL: ${REDIS_SSL:-true}
+      REPORT_BASE_PATH: /app/data/reports
+      BACKUP_PATH: /app/data/backups
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
