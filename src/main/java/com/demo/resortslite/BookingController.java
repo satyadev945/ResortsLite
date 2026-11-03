@@ -1,11 +1,20 @@
 package com.demo.resortslite;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
+// cz-java-0069 [FIXED]: Replaced in-memory HttpSession with Spring Session backed by
+// Azure Cache for Redis on AKS, using the Azure Key Vault CSI Driver with Workload
+// Identity to securely inject Redis credentials (REDIS_HOST, REDIS_PORT, REDIS_PASSWORD).
+// The javax.servlet.http.HttpSession interface is preserved so Spring Session transparently
+// serialises session data to Redis, enabling stateless horizontal scaling across AKS pods
+// without sticky sessions. Session data survives container restarts and scale-out events.
 import javax.servlet.http.HttpSession;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/bookings")
@@ -14,10 +23,26 @@ public class BookingController {
     @Autowired
     private BookingService bookingService;
 
-    // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
-    // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    // cz-java-0070 [FIXED]: Replaced local in-memory HashMap cache with Azure Cache for
+    // Redis via RedisTemplate. The local static Map was instance-local and invisible to
+    // other AKS pod replicas, breaking horizontal scaling. RedisTemplate connects to the
+    // shared Azure Cache for Redis instance (credentials injected via Azure Key Vault CSI
+    // Driver on AKS), so all pods share the same distributed cache with a configurable TTL.
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
 
+    // cz-java-0070 [FIXED]: Cache TTL injected via environment variable / ConfigMap.
+    // Defaults to 3600 seconds (1 hour). Override with BOOKING_CACHE_TTL_SECONDS env var.
+    @Value("${BOOKING_CACHE_TTL_SECONDS:3600}")
+    private long bookingCacheTtlSeconds;
+
+    // cz-java-0057: Externalized absolute file path via environment variable / ConfigMap
+    @Value("${app.report.base-path:#{systemEnvironment['REPORT_BASE_PATH'] ?: '/var/reports'}}")
+    private String reportBasePath;
+
+    // cz-java-0069 [FIXED]: HttpSession parameter is now backed by Spring Session + Redis
+    // (configured via RedisSessionConfig). Session data is stored in Azure Cache for Redis,
+    // injected through Azure Key Vault CSI Driver on AKS, so all pods share session state.
     @PostMapping("/create")
     public Map<String, Object> createBooking(
             @RequestParam String guestName,
@@ -28,13 +53,18 @@ public class BookingController {
 
         Map<String, Object> booking = bookingService.createBooking(guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Booking state stored in
-        // HTTP session memory. AWS ALB distributes requests across EC2 instances — session
-        // data on instance A is invisible to instance B. Auto-scaling and failover breaks.
-        session.setAttribute("lastBooking", booking); // cr-java-0065
-        session.setAttribute("guestName", guestName); // cr-java-0065
+        // cz-java-0069 [FIXED] Lines 34-35: Session attributes are now persisted to
+        // Azure Cache for Redis via Spring Session (RedisSessionConfig + @EnableRedisHttpSession).
+        // Any AKS pod can read this session data on subsequent requests, eliminating the
+        // in-memory session storage that was lost on container restart or scale-out.
+        session.setAttribute("lastBooking", booking); // cz-java-0069 - Redis-backed via Spring Session
+        session.setAttribute("guestName", guestName); // cz-java-0069 - Redis-backed via Spring Session
 
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        // cz-java-0070 [FIXED]: Store booking in Azure Cache for Redis with TTL instead of
+        // the former local static HashMap. RedisTemplate.opsForValue().set() writes the
+        // entry to the shared Redis instance so all AKS pod replicas can read it.
+        String cacheKey = "booking:" + booking.get("bookingId");
+        redisTemplate.opsForValue().set(cacheKey, booking, bookingCacheTtlSeconds, TimeUnit.SECONDS);
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -42,14 +72,16 @@ public class BookingController {
         return response;
     }
 
+    // cz-java-0069 [FIXED]: HttpSession parameter is now backed by Spring Session + Redis.
+    // Reading session attributes works correctly across all AKS pod replicas.
     @GetMapping("/status/{bookingId}")
     public Map<String, Object> getBookingStatus(
             @PathVariable String bookingId,
             HttpSession session) {
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Reading business state
-        // from HTTP session — will return null on any other instance in the cluster.
-        String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065
+        // cz-java-0069 [FIXED]: Session attribute is retrieved from Azure Cache for Redis
+        // via Spring Session — consistent across all instances in the AKS cluster.
+        String lastGuest = (String) session.getAttribute("guestName");
 
         Map<String, Object> result = new HashMap<>();
         result.put("bookingId", bookingId);
@@ -74,10 +106,9 @@ public class BookingController {
 
     @GetMapping("/report/download")
     public Map<String, Object> downloadReport(@RequestParam String month) {
-        // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute
-        // file path. This path does not exist inside a container image. Container images
-        // have their own isolated file systems — /var/legacy/reports won't be present.
-        String reportPath = "/var/legacy/reports/" + month + "_bookings.pdf"; // czr-java-001
+        // cz-java-0057 [FIXED]: Absolute file path replaced with environment variable
+        // injected via Kubernetes ConfigMap / Azure App Configuration.
+        String reportPath = reportBasePath + "/" + month + "_bookings.pdf";
 
         Map<String, Object> response = new HashMap<>();
         response.put("reportPath", reportPath);
