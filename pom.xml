@@ -19,7 +19,21 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <!-- AWS SDK v2 BOM — manages all aws-sdk-java-v2 module versions consistently -->
+        <aws.sdk.version>2.25.40</aws.sdk.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -66,6 +80,40 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- AWS SDK v2 – S3 client (replaces hard-coded file-path operations, cr-java-0061) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+        <!-- AWS SDK v2 – URL connection HTTP client required by S3Client -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+        </dependency>
+        <!-- AWS SDK v2 – Secrets Manager client (cr-java-0069: replaces hard-coded DB credentials) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+        </dependency>
+        <!-- Jackson Databind – used to parse JSON secret values from Secrets Manager -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- cr-java-0065: Spring Session Data Redis — stores HTTP session state in
+             Amazon ElastiCache for Redis instead of in-process JVM memory.
+             Enables stateless application instances, safe horizontal scaling, and
+             session persistence across auto-scaling events and instance failures. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- Spring Boot Redis (Lettuce) starter — provides the RedisConnectionFactory
+             that Spring Session uses to communicate with Amazon ElastiCache for Redis. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
     </dependencies>
 
