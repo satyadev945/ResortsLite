@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resortslite
+  namespace: resortslite
+  labels:
+    app: resortslite
+    version: "1.0.0"
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: resortslite
+  template:
+    metadata:
+      labels:
+        app: resortslite
+        version: "1.0.0"
+        component: backend
+    spec:
+      containers:
+        - name: resortslite
+          image: {{IMAGE_URI}}
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "docker"
+            - name: SERVER_PORT
+              value: "8080"
+            # Oracle Database
+            - name: SPRING_DATASOURCE_URL
+              value: "{{SPRING_DATASOURCE_URL}}"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "{{SPRING_DATASOURCE_USERNAME}}"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "{{SPRING_DATASOURCE_PASSWORD}}"
+            # Azure Cache for Redis
+            - name: REDIS_HOST
+              value: "{{REDIS_HOST}}"
+            - name: REDIS_PORT
+              value: "{{REDIS_PORT}}"
+            - name: REDIS_PASSWORD
+              value: "{{REDIS_PASSWORD}}"
+            - name: REDIS_SSL
+              value: "{{REDIS_SSL}}"
+            # External service endpoints
+            - name: PAYMENT_API_URL
+              value: "{{PAYMENT_API_URL}}"
+            # File paths
+            - name: REPORT_BASE_PATH
+              value: "{{REPORT_BASE_PATH}}"
+            - name: BACKUP_PATH
+              value: "{{BACKUP_PATH}}"
+            # Cache TTL
+            - name: BOOKING_CACHE_TTL_SECONDS
+              value: "{{BOOKING_CACHE_TTL_SECONDS}}"
+            # JVM options
+            - name: JAVA_OPTS
+              value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Xms256m -Xmx512m -Djava.security.egd=file:/dev/./urandom"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: reports-storage
+              mountPath: /var/reports
+            - name: backups-storage
+              mountPath: /var/backups/nightly
+      volumes:
+        - name: reports-storage
+          emptyDir: {}
+        - name: backups-storage
+          emptyDir: {}
+      terminationGracePeriodSeconds: 30

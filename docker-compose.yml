@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  resortslite:
+    image: resortslite:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resortslite-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      # Server
+      SERVER_PORT: "8080"
+      # Redis (Azure Cache for Redis)
+      REDIS_HOST: ${REDIS_HOST:-localhost}
+      REDIS_PORT: ${REDIS_PORT:-6380}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SSL: ${REDIS_SSL:-true}
+      # Database (Oracle)
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:oracle:thin:@localhost:1521:ORCL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-admin}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-}
+      # External service endpoints
+      PAYMENT_API_URL: ${PAYMENT_API_URL:-http://payment-service:9090/payments/charge}
+      # File paths
+      REPORT_BASE_PATH: ${REPORT_BASE_PATH:-/var/reports}
+      BACKUP_PATH: ${BACKUP_PATH:-/var/backups/nightly}
+      # Cache TTL
+      BOOKING_CACHE_TTL_SECONDS: ${BOOKING_CACHE_TTL_SECONDS:-3600}
+      # JVM options
+      JAVA_OPTS: >-
+        -XX:+UseContainerSupport
+        -XX:MaxRAMPercentage=75.0
+        -Xms256m
+        -Xmx512m
+        -Djava.security.egd=file:/dev/./urandom
+    volumes:
+      - reports-data:/var/reports
+      - backups-data:/var/backups/nightly
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  reports-data:
+  backups-data:
+
+networks:
+  app-network:
+    driver: bridge
