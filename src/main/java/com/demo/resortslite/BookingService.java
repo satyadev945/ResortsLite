@@ -1,8 +1,9 @@
 package com.demo.resortslite;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -14,7 +15,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
-public class BookingService {
+public class BookingService implements CommandLineRunner {
 
     @Value("${app.database.host:localhost}")
     private String databaseHost;
@@ -24,6 +25,11 @@ public class BookingService {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Override
+    public void run(String... args) {
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS bookings (id VARCHAR(64) PRIMARY KEY, guest VARCHAR(255), room VARCHAR(64), checkin VARCHAR(32), checkout VARCHAR(32))");
+    }
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {

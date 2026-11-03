@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookingService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">ResortsLite</a> &gt; <a href="index.source.html" class="el_package">com.demo.resortslite</a> &gt; <span class="el_source">BookingService.java</span></div><h1>BookingService.java</h1><pre class="source lang-java linenums">package com.demo.resortslite;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Locale;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+@Service
+<span class="fc" id="L18">public class BookingService implements CommandLineRunner {</span>
+
+    @Value(&quot;${app.database.host:localhost}&quot;)
+    private String databaseHost;
+
+    @Value(&quot;${app.payment.api:https://payments.internal/payments/charge}&quot;)
+    private String paymentApi;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Override
+    public void run(String... args) {
+<span class="fc" id="L31">        jdbcTemplate.execute(&quot;CREATE TABLE IF NOT EXISTS bookings (id VARCHAR(64) PRIMARY KEY, guest VARCHAR(255), room VARCHAR(64), checkin VARCHAR(32), checkout VARCHAR(32))&quot;);</span>
+<span class="fc" id="L32">    }</span>
+
+    public Map&lt;String, Object&gt; createBooking(String guestName, String roomType,
+                                              String checkIn, String checkOut) {
+<span class="fc" id="L36">        String bookingId = &quot;BK-&quot; + UUID.randomUUID().toString().substring(0, 8).toUpperCase();</span>
+
+        // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
+        // An attacker can pass guestName = &quot;'; DROP TABLE bookings; --&quot; to destroy data.
+        // Use parameterised queries (JdbcTemplate with '?') to prevent SQL injection.
+<span class="fc" id="L41">        String sql = &quot;INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)&quot;;</span>
+<span class="fc" id="L42">        jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut);</span>
+
+        // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
+        // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
+<span class="fc" id="L46">        String confirmCode = sha256Hash(bookingId + guestName);</span>
+
+<span class="fc" id="L48">        Map&lt;String, Object&gt; booking = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L49">        booking.put(&quot;bookingId&quot;, bookingId);</span>
+<span class="fc" id="L50">        booking.put(&quot;guestName&quot;, guestName);</span>
+<span class="fc" id="L51">        booking.put(&quot;roomType&quot;, roomType);</span>
+<span class="fc" id="L52">        booking.put(&quot;checkIn&quot;, checkIn);</span>
+<span class="fc" id="L53">        booking.put(&quot;checkOut&quot;, checkOut);</span>
+<span class="fc" id="L54">        booking.put(&quot;confirmationCode&quot;, confirmCode);</span>
+<span class="fc" id="L55">        booking.put(&quot;dbHost&quot;, databaseHost);</span>
+<span class="fc" id="L56">        return booking;</span>
+    }
+
+    public Map&lt;String, Object&gt; getBookingById(String bookingId) {
+        // VIOLATION [Security Health / Critical]: SQL injection via string concatenation.
+        // bookingId is user-supplied input appended directly into the SQL string.
+<span class="fc" id="L62">        String sql = &quot;SELECT * FROM bookings WHERE id = ?&quot;;</span>
+<span class="fc" id="L63">        Map&lt;String, Object&gt; result = new HashMap&lt;&gt;();</span>
+        try {
+<span class="fc" id="L65">            result = jdbcTemplate.queryForMap(sql, bookingId);</span>
+<span class="fc" id="L66">        } catch (Exception e) {</span>
+<span class="fc" id="L67">            result.put(&quot;error&quot;, &quot;Booking not found: &quot; + bookingId);</span>
+<span class="fc" id="L68">        }</span>
+<span class="fc" id="L69">        return result;</span>
+    }
+
+    // VIOLATION [Code Sustainability / High]: High cyclomatic complexity.
+    // This method has 9+ decision branches. Automated transformation tools flag methods
+    // above complexity threshold as high maintenance risk and transformation blockers.
+    public String calculateRoomPrice(String roomType, int nights, String season, String loyalty) {
+<span class="fc" id="L76">        double basePrice = getBasePrice(roomType);</span>
+<span class="fc" id="L77">        basePrice = applySeasonMultiplier(basePrice, season);</span>
+<span class="fc" id="L78">        basePrice = applyLoyaltyDiscount(basePrice, loyalty);</span>
+<span class="fc" id="L79">        basePrice = applyStayDiscount(basePrice, nights);</span>
+<span class="fc" id="L80">        double total = basePrice * nights;</span>
+<span class="fc" id="L81">        return String.format(&quot;%.2f&quot;, total);</span>
+    }
+
+    public boolean isRoomAvailable(String roomType) {
+        // VIOLATION [Code Sustainability / Medium]: Duplicated validation logic.
+        // Same room type validation is repeated here and in calculateRoomPrice.
+        // Should be extracted to a shared RoomType enum or validator.
+<span class="fc" id="L88">        return isSupportedRoomType(roomType);</span>
+    }
+
+    public String generateReport(String month) {
+<span class="fc" id="L92">        return &quot;Report generation triggered for: &quot; + month + &quot; via &quot; + paymentApi;</span>
+    }
+
+    private boolean isSupportedRoomType(String roomType) {
+<span class="pc bpc" id="L96" title="1 of 2 branches missed.">        return &quot;STANDARD&quot;.equals(roomType)</span>
+<span class="pc bpc" id="L97" title="1 of 2 branches missed.">                || &quot;DELUXE&quot;.equals(roomType)</span>
+<span class="fc bfc" id="L98" title="All 2 branches covered.">                || &quot;SUITE&quot;.equals(roomType)</span>
+<span class="pc bpc" id="L99" title="1 of 2 branches missed.">                || &quot;VILLA&quot;.equals(roomType);</span>
+    }
+
+    private double getBasePrice(String roomType) {
+<span class="pc bpc" id="L103" title="2 of 6 branches missed.">        return switch (roomType == null ? &quot;STANDARD&quot; : roomType.toUpperCase(Locale.ROOT)) {</span>
+<span class="fc" id="L104">            case &quot;DELUXE&quot; -&gt; 200.0;</span>
+<span class="nc" id="L105">            case &quot;SUITE&quot; -&gt; 350.0;</span>
+<span class="nc" id="L106">            case &quot;VILLA&quot; -&gt; 600.0;</span>
+<span class="fc" id="L107">            default -&gt; 120.0;</span>
+        };
+    }
+
+    private double applySeasonMultiplier(double basePrice, String season) {
+<span class="fc bfc" id="L112" title="All 2 branches covered.">        if (&quot;PEAK&quot;.equalsIgnoreCase(season)) {</span>
+<span class="fc" id="L113">            return basePrice * 1.5;</span>
+        }
+<span class="fc bfc" id="L115" title="All 2 branches covered.">        if (&quot;OFF&quot;.equalsIgnoreCase(season)) {</span>
+<span class="fc" id="L116">            return basePrice * 0.8;</span>
+        }
+<span class="fc" id="L118">        return basePrice;</span>
+    }
+
+    private double applyLoyaltyDiscount(double basePrice, String loyalty) {
+<span class="fc bfc" id="L122" title="All 2 branches covered.">        if (&quot;GOLD&quot;.equalsIgnoreCase(loyalty)) {</span>
+<span class="fc" id="L123">            return basePrice * 0.9;</span>
+        }
+<span class="pc bpc" id="L125" title="1 of 2 branches missed.">        if (&quot;PLATINUM&quot;.equalsIgnoreCase(loyalty)) {</span>
+<span class="nc" id="L126">            return basePrice * 0.8;</span>
+        }
+<span class="fc bfc" id="L128" title="All 2 branches covered.">        if (&quot;DIAMOND&quot;.equalsIgnoreCase(loyalty)) {</span>
+<span class="fc" id="L129">            return basePrice * 0.7;</span>
+        }
+<span class="fc" id="L131">        return basePrice;</span>
+    }
+
+    private double applyStayDiscount(double basePrice, int nights) {
+<span class="fc bfc" id="L135" title="All 2 branches covered.">        if (nights &gt;= 14) {</span>
+<span class="fc" id="L136">            return basePrice * 0.90;</span>
+        }
+<span class="fc bfc" id="L138" title="All 2 branches covered.">        if (nights &gt;= 7) {</span>
+<span class="fc" id="L139">            return basePrice * 0.95;</span>
+        }
+<span class="fc" id="L141">        return basePrice;</span>
+    }
+
+    private String sha256Hash(String input) {
+        try {
+<span class="fc" id="L146">            MessageDigest md = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="fc" id="L147">            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L148">            StringBuilder sb = new StringBuilder();</span>
+<span class="fc bfc" id="L149" title="All 2 branches covered.">            for (byte b : hash) { sb.append(String.format(&quot;%02x&quot;, b)); }</span>
+<span class="fc" id="L150">            return sb.toString();</span>
+<span class="nc" id="L151">        } catch (NoSuchAlgorithmException e) {</span>
+<span class="nc" id="L152">            return input;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

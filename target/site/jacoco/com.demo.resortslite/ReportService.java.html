@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ReportService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">ResortsLite</a> &gt; <a href="index.source.html" class="el_package">com.demo.resortslite</a> &gt; <span class="el_source">ReportService.java</span></div><h1>ReportService.java</h1><pre class="source lang-java linenums">package com.demo.resortslite;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+<span class="fc" id="L15">public class ReportService {</span>
+
+    @Value(&quot;${app.reports.base-path:reports}&quot;)
+    private String reportBasePath;
+
+    @Value(&quot;${app.backup.path:backups/nightly}&quot;)
+    private String backupPath;
+
+    @Value(&quot;${server.port:8080}&quot;)
+    private int serverPort;
+
+    @Value(&quot;${app.reports.download-base-url:https://reports.resorts-internal.com/download}&quot;)
+    private String reportDownloadBaseUrl;
+
+    public Map&lt;String, Object&gt; generateMonthlyReport(String month, String year) {
+<span class="fc" id="L30">        String fileName = &quot;resort_report_&quot; + month + &quot;_&quot; + year + &quot;.csv&quot;;</span>
+<span class="fc" id="L31">        String fullPath = reportBasePath + File.separator + fileName;</span>
+
+<span class="fc" id="L33">        Map&lt;String, Object&gt; result = new HashMap&lt;&gt;();</span>
+
+        try {
+<span class="fc" id="L36">            File reportDir = new File(reportBasePath);</span>
+<span class="pc bpc" id="L37" title="1 of 2 branches missed.">            if (!reportDir.exists()) {</span>
+<span class="nc" id="L38">                reportDir.mkdirs();</span>
+            }
+
+<span class="fc" id="L41">            FileWriter writer = new FileWriter(fullPath);</span>
+<span class="fc" id="L42">            writer.write(&quot;BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n&quot;);</span>
+<span class="fc" id="L43">            writer.write(&quot;BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n&quot;);</span>
+<span class="fc" id="L44">            writer.write(&quot;BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n&quot;);</span>
+<span class="fc" id="L45">            writer.close();</span>
+
+<span class="fc" id="L47">            result.put(&quot;status&quot;, &quot;generated&quot;);</span>
+<span class="fc" id="L48">            result.put(&quot;path&quot;, fullPath);</span>
+<span class="fc" id="L49">            result.put(&quot;serverPort&quot;, serverPort);</span>
+
+<span class="nc" id="L51">        } catch (IOException e) {</span>
+<span class="nc" id="L52">            result.put(&quot;status&quot;, &quot;error&quot;);</span>
+<span class="nc" id="L53">            result.put(&quot;message&quot;, e.getMessage());</span>
+<span class="fc" id="L54">        }</span>
+
+<span class="fc" id="L56">        return result;</span>
+    }
+
+    // VIOLATION [Code Sustainability / Medium]: No JavaDoc or method documentation.
+    // Missing documentation is flagged across all public methods in the codebase.
+    // This increases onboarding time and transformation risk for automated tools.
+    public String buildReportDownloadUrl(String reportName) { // doc-missing-001
+<span class="fc" id="L63">        return reportDownloadBaseUrl + &quot;/&quot; + reportName;</span>
+    }
+
+    public Map&lt;String, Object&gt; getSystemInfo() { // doc-missing-001
+<span class="fc" id="L67">        String timestamp = new SimpleDateFormat(&quot;yyyy-MM-dd HH:mm:ss&quot;).format(new Date());</span>
+<span class="fc" id="L68">        Map&lt;String, Object&gt; info = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L69">        info.put(&quot;reportPath&quot;, reportBasePath);</span>
+<span class="fc" id="L70">        info.put(&quot;backupPath&quot;, backupPath);</span>
+<span class="fc" id="L71">        info.put(&quot;serverPort&quot;, serverPort);</span>
+<span class="fc" id="L72">        info.put(&quot;generatedAt&quot;, timestamp);</span>
+<span class="fc" id="L73">        return info;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>
