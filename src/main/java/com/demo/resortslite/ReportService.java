@@ -1,55 +1,87 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.Clock;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    // All timestamps are standardised on UTC.
+    private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss'Z'");
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    // Report and backup locations are now S3 key prefixes (bucket/prefix) configured through
+    // environment variables instead of hard-coded local file system paths.
+    private final String reportBucket;
+    private final String reportPrefix;
+    private final String backupPrefix;
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    // S3 client is created lazily using the default AWS credential/region provider chain
+    // (IAM role, environment variables, etc.).
+    private volatile S3Client s3Client;
+
+    // Server port is externalised: resolved from the SERVER_PORT environment variable
+    // (injected from AWS Systems Manager Parameter Store by ECS/EKS/Elastic Beanstalk) via server.port.
+    private final int serverPort;
+
+    public ReportService(
+            @Value("${app.report.s3.bucket:resorts-reports}") String reportBucket,
+            @Value("${app.report.s3.prefix:reports/}") String reportPrefix,
+            @Value("${app.report.s3.backup-prefix:backups/nightly/}") String backupPrefix,
+            @Value("${server.port}") int serverPort) {
+        this.serverPort = serverPort;
+        this.reportBucket = reportBucket;
+        this.reportPrefix = reportPrefix;
+        this.backupPrefix = backupPrefix;
+    }
+
+    private S3Client s3() {
+        S3Client client = s3Client;
+        if (client == null) {
+            synchronized (this) {
+                client = s3Client;
+                if (client == null) {
+                    client = S3Client.create();
+                    s3Client = client;
+                }
+            }
+        }
+        return client;
+    }
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String objectKey = reportPrefix + fileName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
-            if (!reportDir.exists()) {
-                reportDir.mkdirs();
-            }
+            StringBuilder csv = new StringBuilder();
+            csv.append("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
+            csv.append("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
+            csv.append("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
 
-            FileWriter writer = new FileWriter(fullPath);
-            writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
-            writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
-            writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
-            writer.close();
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(reportBucket)
+                    .key(objectKey)
+                    .contentType("text/csv")
+                    .build();
+            s3().putObject(request, RequestBody.fromString(csv.toString()));
 
             result.put("status", "generated");
-            result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT); // czr-port-001
+            result.put("path", "s3://" + reportBucket + "/" + objectKey);
+            result.put("serverPort", serverPort);
 
-        } catch (IOException e) {
+        } catch (RuntimeException e) {
             result.put("status", "error");
             result.put("message", e.getMessage());
         }
@@ -67,11 +99,11 @@ public class ReportService {
     }
 
     public Map<String, Object> getSystemInfo() { // doc-missing-001
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        String timestamp = ZonedDateTime.now(Clock.systemUTC()).withZoneSameInstant(ZoneOffset.UTC).format(TIMESTAMP_FORMAT);
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
-        info.put("serverPort", SERVER_PORT);        // czr-port-001
+        info.put("reportPath", "s3://" + reportBucket + "/" + reportPrefix);
+        info.put("backupPath", "s3://" + reportBucket + "/" + backupPrefix);
+        info.put("serverPort", serverPort);
         info.put("generatedAt", timestamp);
         return info;
     }
