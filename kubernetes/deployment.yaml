@@ -39,7 +39,7 @@ spec:
               value: "UTC"
             - name: SERVER_PORT
               value: "8080"
-            # Oracle Database — inject via Secret
+            # PostgreSQL Database — inject via Secret
             - name: SPRING_DATASOURCE_URL
               value: "{{SPRING_DATASOURCE_URL}}"
             - name: SPRING_DATASOURCE_USERNAME

@@ -12,8 +12,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - TZ=UTC
-      # Oracle Database connection — supply at runtime
-      - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL:-jdbc:oracle:thin:@<DB_HOST>:1521:<DB_SID>}
+      # PostgreSQL Database connection — supply at runtime
+      - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL:-jdbc:postgresql://<DB_HOST>:5432/<DB_NAME>}
       - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME:-admin}
       - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD:-changeme}
       # Redis / ElastiCache connection — supply at runtime
