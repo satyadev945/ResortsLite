@@ -34,6 +34,28 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
+        <!-- health-check-endpoint: Spring Boot Actuator provides /actuator/health endpoint
+             required for container liveness/readiness probes in EKS/Kubernetes -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- cz-java-0069 FIX: Spring Boot Redis starter — provides Lettuce client and
+             RedisConnectionFactory auto-configuration. Redis host/port are supplied at
+             runtime via SPRING_REDIS_HOST and SPRING_REDIS_PORT environment variables
+             injected through a Kubernetes Secret or ConfigMap pointing to Amazon ElastiCache. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- cz-java-0069 FIX: Spring Session Data Redis — replaces the default in-memory
+             HttpSession store with RedisIndexedSessionRepository backed by Amazon ElastiCache
+             for Redis. Sessions are shared across all EKS pod replicas and survive pod
+             restarts, enabling stateless horizontal scaling without sticky sessions. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
         <!-- SECURITY VIOLATION: log4j 2.14.1 has critical CVE-2021-44228 (Log4Shell) -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
