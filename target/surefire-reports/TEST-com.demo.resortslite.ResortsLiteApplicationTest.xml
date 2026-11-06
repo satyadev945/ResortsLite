@@ -1,31 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.demo.resortslite.ResortsLiteApplicationTest" time="2.268" tests="2" errors="0" skipped="0" failures="0">
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.demo.resortslite.ResortsLiteApplicationTest" time="3.178" tests="2" errors="0" skipped="0" failures="0">
   <properties>
-    <property name="java.specification.version" value="17"/>
+    <property name="java.specification.version" value="25"/>
     <property name="sun.jnu.encoding" value="UTF-8"/>
     <property name="java.class.path" value="/modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check/target/test-classes:/modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check/target/classes:/app/.m2/repository/org/springframework/boot/spring-boot-starter-web/3.5.0/spring-boot-starter-web-3.5.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-starter/3.5.0/spring-boot-starter-3.5.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot/3.5.0/spring-boot-3.5.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-autoconfigure/3.5.0/spring-boot-autoconfigure-3.5.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-starter-logging/3.5.0/spring-boot-starter-logging-3.5.0.jar:/app/.m2/repository/ch/qos/logback/logback-classic/1.5.18/logback-classic-1.5.18.jar:/app/.m2/repository/ch/qos/logback/logback-core/1.5.18/logback-core-1.5.18.jar:/app/.m2/repository/org/apache/logging/log4j/log4j-to-slf4j/2.24.3/log4j-to-slf4j-2.24.3.jar:/app/.m2/repository/org/slf4j/jul-to-slf4j/2.0.17/jul-to-slf4j-2.0.17.jar:/app/.m2/repository/jakarta/annotation/jakarta.annotation-api/2.1.1/jakarta.annotation-api-2.1.1.jar:/app/.m2/repository/org/yaml/snakeyaml/2.4/snakeyaml-2.4.jar:/app/.m2/repository/org/springframework/boot/spring-boot-starter-json/3.5.0/spring-boot-starter-json-3.5.0.jar:/app/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.19.0/jackson-databind-2.19.0.jar:/app/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.19.0/jackson-annotations-2.19.0.jar:/app/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.19.0/jackson-core-2.19.0.jar:/app/.m2/repository/com/fasterxml/jackson/datatype/jackson-datatype-jdk8/2.19.0/jackson-datatype-jdk8-2.19.0.jar:/app/.m2/repository/com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.19.0/jackson-datatype-jsr310-2.19.0.jar:/app/.m2/repository/com/fasterxml/jackson/module/jackson-module-parameter-names/2.19.0/jackson-module-parameter-names-2.19.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-starter-tomcat/3.5.0/spring-boot-starter-tomcat-3.5.0.jar:/app/.m2/repository/org/apache/tomcat/embed/tomcat-embed-core/10.1.41/tomcat-embed-core-10.1.41.jar:/app/.m2/repository/org/apache/tomcat/embed/tomcat-embed-el/10.1.41/tomcat-embed-el-10.1.41.jar:/app/.m2/repository/org/apache/tomcat/embed/tomcat-embed-websocket/10.1.41/tomcat-embed-websocket-10.1.41.jar:/app/.m2/repository/org/springframework/spring-web/6.2.7/spring-web-6.2.7.jar:/app/.m2/repository/org/springframework/spring-beans/6.2.7/spring-beans-6.2.7.jar:/app/.m2/repository/io/micrometer/micrometer-observation/1.15.0/micrometer-observation-1.15.0.jar:/app/.m2/repository/io/micrometer/micrometer-commons/1.15.0/micrometer-commons-1.15.0.jar:/app/.m2/repository/org/springframework/spring-webmvc/6.2.7/spring-webmvc-6.2.7.jar:/app/.m2/repository/org/springframework/spring-aop/6.2.7/spring-aop-6.2.7.jar:/app/.m2/repository/org/springframework/spring-context/6.2.7/spring-context-6.2.7.jar:/app/.m2/repository/org/springframework/spring-expression/6.2.7/spring-expression-6.2.7.jar:/app/.m2/repository/org/springframework/boot/spring-boot-starter-jdbc/3.5.0/spring-boot-starter-jdbc-3.5.0.jar:/app/.m2/repository/com/zaxxer/HikariCP/6.3.0/HikariCP-6.3.0.jar:/app/.m2/repository/org/slf4j/slf4j-api/2.0.17/slf4j-api-2.0.17.jar:/app/.m2/repository/org/springframework/spring-jdbc/6.2.7/spring-jdbc-6.2.7.jar:/app/.m2/repository/org/springframework/spring-tx/6.2.7/spring-tx-6.2.7.jar:/app/.m2/repository/org/apache/logging/log4j/log4j-core/2.24.3/log4j-core-2.24.3.jar:/app/.m2/repository/org/apache/logging/log4j/log4j-api/2.24.3/log4j-api-2.24.3.jar:/app/.m2/repository/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar:/app/.m2/repository/com/h2database/h2/2.3.232/h2-2.3.232.jar:/app/.m2/repository/com/mysql/mysql-connector-j/8.2.0/mysql-connector-j-8.2.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-starter-test/3.5.0/spring-boot-starter-test-3.5.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-test/3.5.0/spring-boot-test-3.5.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-test-autoconfigure/3.5.0/spring-boot-test-autoconfigure-3.5.0.jar:/app/.m2/repository/com/jayway/jsonpath/json-path/2.9.0/json-path-2.9.0.jar:/app/.m2/repository/jakarta/xml/bind/jakarta.xml.bind-api/4.0.2/jakarta.xml.bind-api-4.0.2.jar:/app/.m2/repository/jakarta/activation/jakarta.activation-api/2.1.3/jakarta.activation-api-2.1.3.jar:/app/.m2/repository/net/minidev/json-smart/2.5.2/json-smart-2.5.2.jar:/app/.m2/repository/net/minidev/accessors-smart/2.5.2/accessors-smart-2.5.2.jar:/app/.m2/repository/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar:/app/.m2/repository/org/assertj/assertj-core/3.27.3/assertj-core-3.27.3.jar:/app/.m2/repository/net/bytebuddy/byte-buddy/1.17.5/byte-buddy-1.17.5.jar:/app/.m2/repository/org/awaitility/awaitility/4.3.0/awaitility-4.3.0.jar:/app/.m2/repository/org/hamcrest/hamcrest/3.0/hamcrest-3.0.jar:/app/.m2/repository/org/junit/jupiter/junit-jupiter/5.12.2/junit-jupiter-5.12.2.jar:/app/.m2/repository/org/junit/jupiter/junit-jupiter-api/5.12.2/junit-jupiter-api-5.12.2.jar:/app/.m2/repository/org/opentest4j/opentest4j/1.3.0/opentest4j-1.3.0.jar:/app/.m2/repository/org/junit/platform/junit-platform-commons/1.12.2/junit-platform-commons-1.12.2.jar:/app/.m2/repository/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar:/app/.m2/repository/org/junit/jupiter/junit-jupiter-params/5.12.2/junit-jupiter-params-5.12.2.jar:/app/.m2/repository/org/junit/jupiter/junit-jupiter-engine/5.12.2/junit-jupiter-engine-5.12.2.jar:/app/.m2/repository/org/junit/platform/junit-platform-engine/1.12.2/junit-platform-engine-1.12.2.jar:/app/.m2/repository/org/mockito/mockito-core/5.17.0/mockito-core-5.17.0.jar:/app/.m2/repository/net/bytebuddy/byte-buddy-agent/1.17.5/byte-buddy-agent-1.17.5.jar:/app/.m2/repository/org/objenesis/objenesis/3.3/objenesis-3.3.jar:/app/.m2/repository/org/mockito/mockito-junit-jupiter/5.17.0/mockito-junit-jupiter-5.17.0.jar:/app/.m2/repository/org/skyscreamer/jsonassert/1.5.3/jsonassert-1.5.3.jar:/app/.m2/repository/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.jar:/app/.m2/repository/org/springframework/spring-core/6.2.7/spring-core-6.2.7.jar:/app/.m2/repository/org/springframework/spring-jcl/6.2.7/spring-jcl-6.2.7.jar:/app/.m2/repository/org/springframework/spring-test/6.2.7/spring-test-6.2.7.jar:/app/.m2/repository/org/xmlunit/xmlunit-core/2.10.1/xmlunit-core-2.10.1.jar:"/>
-    <property name="java.vm.vendor" value="Amazon.com Inc."/>
+    <property name="java.vm.vendor" value="Eclipse Adoptium"/>
     <property name="sun.arch.data.model" value="64"/>
     <property name="catalina.useNaming" value="false"/>
-    <property name="java.vendor.url" value="https://aws.amazon.com/corretto/"/>
+    <property name="java.vendor.url" value="https://adoptium.net/"/>
     <property name="user.timezone" value="UTC"/>
     <property name="os.name" value="Linux"/>
-    <property name="java.vm.specification.version" value="17"/>
+    <property name="java.vm.specification.version" value="25"/>
     <property name="APPLICATION_NAME" value="ResortsLite-Test"/>
-    <property name="sun.java.launcher" value="SUN_STANDARD"/>
     <property name="user.country" value="US"/>
-    <property name="sun.boot.library.path" value="/usr/lib/jvm/java-17-amazon-corretto.x86_64/lib"/>
-    <property name="sun.java.command" value="/modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check/target/surefire/surefirebooter-20261106143110698_3.jar /modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check/target/surefire 2026-11-06T14-31-10_641-jvmRun1 surefire-20261106143110698_1tmp surefire_0-20261106143110698_2tmp"/>
+    <property name="sun.java.launcher" value="SUN_STANDARD"/>
+    <property name="sun.boot.library.path" value="/app/.sdkman/candidates/java/25.0.4-tem/lib"/>
+    <property name="sun.java.command" value="/modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check/target/surefire/surefirebooter-20261106143346832_3.jar /modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check/target/surefire 2026-11-06T14-33-46_781-jvmRun1 surefire-20261106143346832_1tmp surefire_0-20261106143346832_2tmp"/>
     <property name="jdk.debug" value="release"/>
     <property name="surefire.test.class.path" value="/modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check/target/test-classes:/modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check/target/classes:/app/.m2/repository/org/springframework/boot/spring-boot-starter-web/3.5.0/spring-boot-starter-web-3.5.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-starter/3.5.0/spring-boot-starter-3.5.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot/3.5.0/spring-boot-3.5.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-autoconfigure/3.5.0/spring-boot-autoconfigure-3.5.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-starter-logging/3.5.0/spring-boot-starter-logging-3.5.0.jar:/app/.m2/repository/ch/qos/logback/logback-classic/1.5.18/logback-classic-1.5.18.jar:/app/.m2/repository/ch/qos/logback/logback-core/1.5.18/logback-core-1.5.18.jar:/app/.m2/repository/org/apache/logging/log4j/log4j-to-slf4j/2.24.3/log4j-to-slf4j-2.24.3.jar:/app/.m2/repository/org/slf4j/jul-to-slf4j/2.0.17/jul-to-slf4j-2.0.17.jar:/app/.m2/repository/jakarta/annotation/jakarta.annotation-api/2.1.1/jakarta.annotation-api-2.1.1.jar:/app/.m2/repository/org/yaml/snakeyaml/2.4/snakeyaml-2.4.jar:/app/.m2/repository/org/springframework/boot/spring-boot-starter-json/3.5.0/spring-boot-starter-json-3.5.0.jar:/app/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.19.0/jackson-databind-2.19.0.jar:/app/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.19.0/jackson-annotations-2.19.0.jar:/app/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.19.0/jackson-core-2.19.0.jar:/app/.m2/repository/com/fasterxml/jackson/datatype/jackson-datatype-jdk8/2.19.0/jackson-datatype-jdk8-2.19.0.jar:/app/.m2/repository/com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.19.0/jackson-datatype-jsr310-2.19.0.jar:/app/.m2/repository/com/fasterxml/jackson/module/jackson-module-parameter-names/2.19.0/jackson-module-parameter-names-2.19.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-starter-tomcat/3.5.0/spring-boot-starter-tomcat-3.5.0.jar:/app/.m2/repository/org/apache/tomcat/embed/tomcat-embed-core/10.1.41/tomcat-embed-core-10.1.41.jar:/app/.m2/repository/org/apache/tomcat/embed/tomcat-embed-el/10.1.41/tomcat-embed-el-10.1.41.jar:/app/.m2/repository/org/apache/tomcat/embed/tomcat-embed-websocket/10.1.41/tomcat-embed-websocket-10.1.41.jar:/app/.m2/repository/org/springframework/spring-web/6.2.7/spring-web-6.2.7.jar:/app/.m2/repository/org/springframework/spring-beans/6.2.7/spring-beans-6.2.7.jar:/app/.m2/repository/io/micrometer/micrometer-observation/1.15.0/micrometer-observation-1.15.0.jar:/app/.m2/repository/io/micrometer/micrometer-commons/1.15.0/micrometer-commons-1.15.0.jar:/app/.m2/repository/org/springframework/spring-webmvc/6.2.7/spring-webmvc-6.2.7.jar:/app/.m2/repository/org/springframework/spring-aop/6.2.7/spring-aop-6.2.7.jar:/app/.m2/repository/org/springframework/spring-context/6.2.7/spring-context-6.2.7.jar:/app/.m2/repository/org/springframework/spring-expression/6.2.7/spring-expression-6.2.7.jar:/app/.m2/repository/org/springframework/boot/spring-boot-starter-jdbc/3.5.0/spring-boot-starter-jdbc-3.5.0.jar:/app/.m2/repository/com/zaxxer/HikariCP/6.3.0/HikariCP-6.3.0.jar:/app/.m2/repository/org/slf4j/slf4j-api/2.0.17/slf4j-api-2.0.17.jar:/app/.m2/repository/org/springframework/spring-jdbc/6.2.7/spring-jdbc-6.2.7.jar:/app/.m2/repository/org/springframework/spring-tx/6.2.7/spring-tx-6.2.7.jar:/app/.m2/repository/org/apache/logging/log4j/log4j-core/2.24.3/log4j-core-2.24.3.jar:/app/.m2/repository/org/apache/logging/log4j/log4j-api/2.24.3/log4j-api-2.24.3.jar:/app/.m2/repository/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar:/app/.m2/repository/com/h2database/h2/2.3.232/h2-2.3.232.jar:/app/.m2/repository/com/mysql/mysql-connector-j/8.2.0/mysql-connector-j-8.2.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-starter-test/3.5.0/spring-boot-starter-test-3.5.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-test/3.5.0/spring-boot-test-3.5.0.jar:/app/.m2/repository/org/springframework/boot/spring-boot-test-autoconfigure/3.5.0/spring-boot-test-autoconfigure-3.5.0.jar:/app/.m2/repository/com/jayway/jsonpath/json-path/2.9.0/json-path-2.9.0.jar:/app/.m2/repository/jakarta/xml/bind/jakarta.xml.bind-api/4.0.2/jakarta.xml.bind-api-4.0.2.jar:/app/.m2/repository/jakarta/activation/jakarta.activation-api/2.1.3/jakarta.activation-api-2.1.3.jar:/app/.m2/repository/net/minidev/json-smart/2.5.2/json-smart-2.5.2.jar:/app/.m2/repository/net/minidev/accessors-smart/2.5.2/accessors-smart-2.5.2.jar:/app/.m2/repository/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar:/app/.m2/repository/org/assertj/assertj-core/3.27.3/assertj-core-3.27.3.jar:/app/.m2/repository/net/bytebuddy/byte-buddy/1.17.5/byte-buddy-1.17.5.jar:/app/.m2/repository/org/awaitility/awaitility/4.3.0/awaitility-4.3.0.jar:/app/.m2/repository/org/hamcrest/hamcrest/3.0/hamcrest-3.0.jar:/app/.m2/repository/org/junit/jupiter/junit-jupiter/5.12.2/junit-jupiter-5.12.2.jar:/app/.m2/repository/org/junit/jupiter/junit-jupiter-api/5.12.2/junit-jupiter-api-5.12.2.jar:/app/.m2/repository/org/opentest4j/opentest4j/1.3.0/opentest4j-1.3.0.jar:/app/.m2/repository/org/junit/platform/junit-platform-commons/1.12.2/junit-platform-commons-1.12.2.jar:/app/.m2/repository/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar:/app/.m2/repository/org/junit/jupiter/junit-jupiter-params/5.12.2/junit-jupiter-params-5.12.2.jar:/app/.m2/repository/org/junit/jupiter/junit-jupiter-engine/5.12.2/junit-jupiter-engine-5.12.2.jar:/app/.m2/repository/org/junit/platform/junit-platform-engine/1.12.2/junit-platform-engine-1.12.2.jar:/app/.m2/repository/org/mockito/mockito-core/5.17.0/mockito-core-5.17.0.jar:/app/.m2/repository/net/bytebuddy/byte-buddy-agent/1.17.5/byte-buddy-agent-1.17.5.jar:/app/.m2/repository/org/objenesis/objenesis/3.3/objenesis-3.3.jar:/app/.m2/repository/org/mockito/mockito-junit-jupiter/5.17.0/mockito-junit-jupiter-5.17.0.jar:/app/.m2/repository/org/skyscreamer/jsonassert/1.5.3/jsonassert-1.5.3.jar:/app/.m2/repository/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.jar:/app/.m2/repository/org/springframework/spring-core/6.2.7/spring-core-6.2.7.jar:/app/.m2/repository/org/springframework/spring-jcl/6.2.7/spring-jcl-6.2.7.jar:/app/.m2/repository/org/springframework/spring-test/6.2.7/spring-test-6.2.7.jar:/app/.m2/repository/org/xmlunit/xmlunit-core/2.10.1/xmlunit-core-2.10.1.jar:"/>
     <property name="sun.cpu.endian" value="little"/>
     <property name="user.home" value="/app"/>
-    <property name="maven.compiler.source" value="17"/>
     <property name="user.language" value="en"/>
     <property name="java.specification.vendor" value="Oracle Corporation"/>
-    <property name="java.version.date" value="2026-10-20"/>
-    <property name="java.home" value="/usr/lib/jvm/java-17-amazon-corretto.x86_64"/>
-    <property name="spring.profiles.active" value="test"/>
+    <property name="reactor.schedulers.defaultBoundedElasticOnVirtualThreads" value="true"/>
+    <property name="java.version.date" value="2026-07-21"/>
+    <property name="java.home" value="/app/.sdkman/candidates/java/25.0.4-tem"/>
     <property name="file.separator" value="/"/>
     <property name="basedir" value="/modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check"/>
     <property name="java.vm.compressedOopsMode" value="Zero based"/>
@@ -34,43 +33,44 @@
     <property name="java.specification.name" value="Java Platform API Specification"/>
     <property name="FILE_LOG_CHARSET" value="UTF-8"/>
     <property name="java.awt.headless" value="true"/>
-    <property name="surefire.real.class.path" value="/modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check/target/surefire/surefirebooter-20261106143110698_3.jar"/>
-    <property name="maven.compiler.release" value="17"/>
+    <property name="surefire.real.class.path" value="/modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check/target/surefire/surefirebooter-20261106143346832_3.jar"/>
     <property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/>
-    <property name="java.runtime.version" value="17.0.21+10-LTS"/>
+    <property name="java.runtime.version" value="25.0.4+7-LTS"/>
     <property name="user.name" value="studioai"/>
+    <property name="stdout.encoding" value="UTF-8"/>
     <property name="path.separator" value=":"/>
     <property name="os.version" value="6.12.47-0-virt"/>
     <property name="java.runtime.name" value="OpenJDK Runtime Environment"/>
     <property name="file.encoding" value="UTF-8"/>
     <property name="java.vm.name" value="OpenJDK 64-Bit Server VM"/>
-    <property name="java.vendor.version" value="Corretto-17.0.21.0.10"/>
+    <property name="java.vendor.version" value="Temurin-25.0.4+7"/>
+    <property name="testFailureIgnore" value="true"/>
     <property name="localRepository" value="/app/.m2/repository"/>
-    <property name="java.vendor.url.bug" value="https://github.com/corretto/corretto-17/issues/"/>
+    <property name="java.vendor.url.bug" value="https://github.com/adoptium/adoptium-support/issues"/>
     <property name="java.io.tmpdir" value="/tmp"/>
     <property name="com.zaxxer.hikari.pool_number" value="2"/>
-    <property name="catalina.home" value="/tmp/tomcat.8080.6887731148202940023"/>
-    <property name="java.version" value="17.0.21"/>
+    <property name="catalina.home" value="/tmp/tomcat.8080.8024011706410251216"/>
+    <property name="java.version" value="25.0.4"/>
     <property name="user.dir" value="/modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check"/>
     <property name="os.arch" value="amd64"/>
     <property name="java.vm.specification.name" value="Java Virtual Machine Specification"/>
-    <property name="PID" value="7071"/>
+    <property name="PID" value="8174"/>
     <property name="CONSOLE_LOG_CHARSET" value="UTF-8"/>
-    <property name="catalina.base" value="/tmp/tomcat.8080.6887731148202940023"/>
+    <property name="catalina.base" value="/tmp/tomcat.8080.8024011706410251216"/>
     <property name="native.encoding" value="UTF-8"/>
-    <property name="maven.compiler.target" value="17"/>
     <property name="java.library.path" value="/usr/java/packages/lib:/usr/lib64:/lib64:/lib:/usr/lib"/>
     <property name="java.vm.info" value="mixed mode, sharing"/>
-    <property name="java.vendor" value="Amazon.com Inc."/>
-    <property name="java.vm.version" value="17.0.21+10-LTS"/>
-    <property name="java.specification.maintenance.version" value="1"/>
+    <property name="stderr.encoding" value="UTF-8"/>
+    <property name="java.vendor" value="Eclipse Adoptium"/>
+    <property name="java.vm.version" value="25.0.4+7-LTS"/>
+    <property name="stdin.encoding" value="UTF-8"/>
     <property name="sun.io.unicode.encoding" value="UnicodeLittle"/>
-    <property name="java.class.version" value="61.0"/>
+    <property name="java.class.version" value="69.0"/>
     <property name="LOGGED_APPLICATION_NAME" value="[ResortsLite-Test] "/>
   </properties>
-  <testcase name="contextLoads" classname="com.demo.resortslite.ResortsLiteApplicationTest" time="0.447">
-    <system-out><![CDATA[14:31:11.202 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.demo.resortslite.ResortsLiteApplicationTest]: ResortsLiteApplicationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
-14:31:11.284 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.demo.resortslite.ResortsLiteApplication for test class com.demo.resortslite.ResortsLiteApplicationTest
+  <testcase name="contextLoads" classname="com.demo.resortslite.ResortsLiteApplicationTest" time="0.582">
+    <system-out><![CDATA[14:33:47.694 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.demo.resortslite.ResortsLiteApplicationTest]: ResortsLiteApplicationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+14:33:47.828 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.demo.resortslite.ResortsLiteApplication for test class com.demo.resortslite.ResortsLiteApplicationTest
 
   .   ____          _            __ _ _
  /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
@@ -81,15 +81,21 @@
 
  :: Spring Boot ::                (v3.5.0)
 
-2026-11-06T14:31:11.593Z  INFO 7071 --- [ResortsLite-Test] [           main] c.d.r.ResortsLiteApplicationTest         : Starting ResortsLiteApplicationTest using Java 17.0.21 with PID 7071 (started by studioai in /modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check)
-2026-11-06T14:31:11.594Z  INFO 7071 --- [ResortsLite-Test] [           main] c.d.r.ResortsLiteApplicationTest         : The following 1 profile is active: "test"
-2026-11-06T14:31:12.097Z  INFO 7071 --- [ResortsLite-Test] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
-2026-11-06T14:31:12.216Z  INFO 7071 --- [ResortsLite-Test] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:testdb user=SA
-2026-11-06T14:31:12.219Z  INFO 7071 --- [ResortsLite-Test] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
-2026-11-06T14:31:12.540Z  INFO 7071 --- [ResortsLite-Test] [           main] c.d.r.ResortsLiteApplicationTest         : Started ResortsLiteApplicationTest in 1.159 seconds (process running for 1.793)
+2026-11-06T14:33:48.298Z  INFO 8174 --- [ResortsLite-Test] [           main] c.d.r.ResortsLiteApplicationTest         : Starting ResortsLiteApplicationTest using Java 25.0.4 with PID 8174 (started by studioai in /modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check)
+2026-11-06T14:33:48.299Z  INFO 8174 --- [ResortsLite-Test] [           main] c.d.r.ResortsLiteApplicationTest         : The following 1 profile is active: "test"
+2026-11-06T14:33:48.999Z  INFO 8174 --- [ResortsLite-Test] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-11-06T14:33:49.291Z  INFO 8174 --- [ResortsLite-Test] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:testdb user=SA
+2026-11-06T14:33:49.294Z  INFO 8174 --- [ResortsLite-Test] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-11-06T14:33:49.677Z  INFO 8174 --- [ResortsLite-Test] [           main] c.d.r.ResortsLiteApplicationTest         : Started ResortsLiteApplicationTest in 1.687 seconds (process running for 2.801)
 ]]></system-out>
+    <system-err><![CDATA[Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (/app/.m2/repository/net/bytebuddy/byte-buddy-agent/1.17.5/byte-buddy-agent-1.17.5.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+]]></system-err>
   </testcase>
-  <testcase name="mainMethod_doesNotThrow" classname="com.demo.resortslite.ResortsLiteApplicationTest" time="0.381">
+  <testcase name="mainMethod_doesNotThrow" classname="com.demo.resortslite.ResortsLiteApplicationTest" time="0.432">
     <system-out><![CDATA[
   .   ____          _            __ _ _
  /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
@@ -100,18 +106,19 @@
 
  :: Spring Boot ::                (v3.5.0)
 
-2026-11-06T14:31:13.025Z  INFO 7071 --- [ResortsLite-Test] [           main] c.d.resortslite.ResortsLiteApplication   : Starting ResortsLiteApplication using Java 17.0.21 with PID 7071 (started by studioai in /modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check)
-2026-11-06T14:31:13.026Z  INFO 7071 --- [ResortsLite-Test] [           main] c.d.resortslite.ResortsLiteApplication   : The following 1 profile is active: "test"
-2026-11-06T14:31:13.222Z  INFO 7071 --- [ResortsLite-Test] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
-2026-11-06T14:31:13.230Z  INFO 7071 --- [ResortsLite-Test] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
-2026-11-06T14:31:13.231Z  INFO 7071 --- [ResortsLite-Test] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.41]
-2026-11-06T14:31:13.258Z  INFO 7071 --- [ResortsLite-Test] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
-2026-11-06T14:31:13.259Z  INFO 7071 --- [ResortsLite-Test] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 232 ms
-2026-11-06T14:31:13.304Z  INFO 7071 --- [ResortsLite-Test] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Starting...
-2026-11-06T14:31:13.306Z  INFO 7071 --- [ResortsLite-Test] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-2 - Added connection conn10: url=jdbc:h2:mem:testdb user=SA
-2026-11-06T14:31:13.306Z  INFO 7071 --- [ResortsLite-Test] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Start completed.
-2026-11-06T14:31:13.375Z  INFO 7071 --- [ResortsLite-Test] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
-2026-11-06T14:31:13.379Z  INFO 7071 --- [ResortsLite-Test] [           main] c.d.resortslite.ResortsLiteApplication   : Started ResortsLiteApplication in 0.376 seconds (process running for 2.632)
+2026-11-06T14:33:50.296Z  INFO 8174 --- [ResortsLite-Test] [           main] c.d.resortslite.ResortsLiteApplication   : Starting ResortsLiteApplication using Java 25.0.4 with PID 8174 (started by studioai in /modernize-data/studio-data/TNT1001/APP889188/transformed-code/101/studio-workspace/Test Java repo check)
+2026-11-06T14:33:50.296Z  INFO 8174 --- [ResortsLite-Test] [           main] c.d.resortslite.ResortsLiteApplication   : The following 1 profile is active: "qa"
+2026-11-06T14:33:50.520Z  INFO 8174 --- [ResortsLite-Test] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-11-06T14:33:50.536Z  INFO 8174 --- [ResortsLite-Test] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-11-06T14:33:50.537Z  INFO 8174 --- [ResortsLite-Test] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.41]
+2026-11-06T14:33:50.573Z  INFO 8174 --- [ResortsLite-Test] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-11-06T14:33:50.574Z  INFO 8174 --- [ResortsLite-Test] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 275 ms
+2026-11-06T14:33:50.671Z  INFO 8174 --- [ResortsLite-Test] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Starting...
+2026-11-06T14:33:50.673Z  INFO 8174 --- [ResortsLite-Test] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-2 - Added connection conn10: url=jdbc:h2:mem:resortdb user=SA
+2026-11-06T14:33:50.674Z  INFO 8174 --- [ResortsLite-Test] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Start completed.
+2026-11-06T14:33:50.679Z  INFO 8174 --- [ResortsLite-Test] [           main] o.s.b.a.h2.H2ConsoleAutoConfiguration    : H2 console available at '/h2-console'. Database available at 'jdbc:h2:mem:resortdb'
+2026-11-06T14:33:50.700Z  INFO 8174 --- [ResortsLite-Test] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
+2026-11-06T14:33:50.703Z  INFO 8174 --- [ResortsLite-Test] [           main] c.d.resortslite.ResortsLiteApplication   : Started ResortsLiteApplication in 0.427 seconds (process running for 3.827)
 ]]></system-out>
   </testcase>
 </testsuite>

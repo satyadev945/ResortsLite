@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookingService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">ResortsLite</a> &gt; <a href="index.source.html" class="el_package">com.demo.resortslite</a> &gt; <span class="el_source">BookingService.java</span></div><h1>BookingService.java</h1><pre class="source lang-java linenums">package com.demo.resortslite;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.security.MessageDigest;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+@Service
+<span class="fc" id="L13">public class BookingService {</span>
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    // NOTE: Infrastructure endpoints and credentials should be externalised to
+    // environment variables or AWS Secrets Manager / Parameter Store.
+<span class="fc" id="L20">    private static final String DB_HOST = System.getenv().getOrDefault(&quot;DB_HOST&quot;, &quot;db-prod.resorts-internal.com&quot;);</span>
+<span class="fc" id="L21">    private static final String DB_USER = System.getenv().getOrDefault(&quot;DB_USER&quot;, &quot;admin&quot;);</span>
+    // Credentials removed from source — use environment variables or secrets management
+<span class="fc" id="L23">    private static final String PAYMENT_API = System.getenv().getOrDefault(</span>
+            &quot;PAYMENT_API_URL&quot;, &quot;https://payment-svc.internal:9090/payments/charge&quot;);
+
+    public Map&lt;String, Object&gt; createBooking(String guestName, String roomType,
+                                              String checkIn, String checkOut) {
+<span class="fc" id="L28">        String bookingId = &quot;BK-&quot; + UUID.randomUUID().toString().substring(0, 8).toUpperCase();</span>
+
+        // Fixed SQL injection: replaced string concatenation with parameterised query
+<span class="fc" id="L31">        String sql = &quot;INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)&quot;;</span>
+<span class="fc" id="L32">        jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut);</span>
+
+        // Replaced MD5 (broken, RFC 6151) with SHA-256 for confirmation code hashing
+<span class="fc" id="L35">        String confirmCode = sha256Hash(bookingId + guestName);</span>
+
+<span class="fc" id="L37">        Map&lt;String, Object&gt; booking = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L38">        booking.put(&quot;bookingId&quot;, bookingId);</span>
+<span class="fc" id="L39">        booking.put(&quot;guestName&quot;, guestName);</span>
+<span class="fc" id="L40">        booking.put(&quot;roomType&quot;, roomType);</span>
+<span class="fc" id="L41">        booking.put(&quot;checkIn&quot;, checkIn);</span>
+<span class="fc" id="L42">        booking.put(&quot;checkOut&quot;, checkOut);</span>
+<span class="fc" id="L43">        booking.put(&quot;confirmationCode&quot;, confirmCode);</span>
+        // Removed DB_HOST from response to avoid leaking infrastructure details
+<span class="fc" id="L45">        return booking;</span>
+    }
+
+    public Map&lt;String, Object&gt; getBookingById(String bookingId) {
+        // Fixed SQL injection: replaced string concatenation with parameterised query
+<span class="fc" id="L50">        String sql = &quot;SELECT * FROM bookings WHERE id = ?&quot;;</span>
+<span class="fc" id="L51">        Map&lt;String, Object&gt; result = new HashMap&lt;&gt;();</span>
+        try {
+<span class="fc" id="L53">            result = jdbcTemplate.queryForMap(sql, bookingId);</span>
+<span class="fc" id="L54">        } catch (Exception e) {</span>
+<span class="fc" id="L55">            result.put(&quot;error&quot;, &quot;Booking not found: &quot; + bookingId);</span>
+<span class="fc" id="L56">        }</span>
+<span class="fc" id="L57">        return result;</span>
+    }
+
+    /**
+     * Calculates the total room price based on room type, number of nights,
+     * season, and loyalty tier.
+     *
+     * &lt;p&gt;Refactored from verbose if-else chains to use Java 25 pattern-matching
+     * switch expressions for improved readability and reduced cyclomatic complexity.&lt;/p&gt;
+     *
+     * @param roomType  room category (STANDARD, DELUXE, SUITE, VILLA)
+     * @param nights    number of nights
+     * @param season    pricing season (PEAK, OFF, or standard)
+     * @param loyalty   guest loyalty tier (GOLD, PLATINUM, DIAMOND, or none)
+     * @return formatted total price string
+     */
+    public String calculateRoomPrice(String roomType, int nights, String season, String loyalty) {
+        // Replaced verbose if-else chains with Java 25 switch expressions (pattern matching)
+<span class="fc bfc" id="L75" title="All 5 branches covered.">        double basePrice = switch (roomType) {</span>
+<span class="fc" id="L76">            case &quot;STANDARD&quot; -&gt; 120.0;</span>
+<span class="fc" id="L77">            case &quot;DELUXE&quot;   -&gt; 200.0;</span>
+<span class="fc" id="L78">            case &quot;SUITE&quot;    -&gt; 350.0;</span>
+<span class="fc" id="L79">            case &quot;VILLA&quot;    -&gt; 600.0;</span>
+<span class="fc" id="L80">            default         -&gt; 120.0;</span>
+        };
+
+<span class="fc bfc" id="L83" title="All 3 branches covered.">        double seasonMultiplier = switch (season) {</span>
+<span class="fc" id="L84">            case &quot;PEAK&quot; -&gt; 1.5;</span>
+<span class="fc" id="L85">            case &quot;OFF&quot;  -&gt; 0.8;</span>
+<span class="fc" id="L86">            default     -&gt; 1.0;</span>
+        };
+
+<span class="fc bfc" id="L89" title="All 4 branches covered.">        double loyaltyDiscount = switch (loyalty) {</span>
+<span class="fc" id="L90">            case &quot;GOLD&quot;     -&gt; 0.9;</span>
+<span class="fc" id="L91">            case &quot;PLATINUM&quot; -&gt; 0.8;</span>
+<span class="fc" id="L92">            case &quot;DIAMOND&quot;  -&gt; 0.7;</span>
+<span class="fc" id="L93">            default         -&gt; 1.0;</span>
+        };
+
+<span class="fc bfc" id="L96" title="All 4 branches covered.">        double stayDiscount = (nights &gt;= 14) ? 0.90 : (nights &gt;= 7) ? 0.95 : 1.0;</span>
+
+<span class="fc" id="L98">        double total = basePrice * seasonMultiplier * loyaltyDiscount * stayDiscount * nights;</span>
+<span class="fc" id="L99">        return String.format(&quot;%.2f&quot;, total);</span>
+    }
+
+    /**
+     * Checks whether a room of the given type is available for booking.
+     *
+     * @param roomType the room category to check
+     * @return {@code true} if the room type is valid and available
+     */
+    public boolean isRoomAvailable(String roomType) {
+        // Extracted room-type validation to a single switch expression,
+        // eliminating duplicated validation logic from calculateRoomPrice.
+<span class="fc bfc" id="L111" title="All 2 branches covered.">        return switch (roomType) {</span>
+<span class="fc" id="L112">            case &quot;STANDARD&quot;, &quot;DELUXE&quot;, &quot;SUITE&quot;, &quot;VILLA&quot; -&gt; true;</span>
+<span class="fc" id="L113">            default -&gt; false;</span>
+        };
+    }
+
+    /**
+     * Triggers report generation for the specified month.
+     *
+     * @param month the month identifier for the report
+     * @return a status message
+     */
+    public String generateReport(String month) {
+<span class="fc" id="L124">        return &quot;Report generation triggered for: &quot; + month;</span>
+    }
+
+    /**
+     * Computes a SHA-256 hex digest of the given input string.
+     * Replaces the previously used MD5 algorithm (broken per RFC 6151).
+     *
+     * @param input the string to hash
+     * @return hex-encoded SHA-256 digest, or the original input on error
+     */
+    private String sha256Hash(String input) {
+        try {
+<span class="fc" id="L136">            MessageDigest md = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="fc" id="L137">            byte[] hash = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));</span>
+<span class="fc" id="L138">            StringBuilder sb = new StringBuilder();</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">            for (byte b : hash) {</span>
+<span class="fc" id="L140">                sb.append(String.format(&quot;%02x&quot;, b));</span>
+            }
+<span class="fc" id="L142">            return sb.toString();</span>
+<span class="nc" id="L143">        } catch (Exception e) {</span>
+<span class="nc" id="L144">            return input;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

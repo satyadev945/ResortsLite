@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ReportService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">ResortsLite</a> &gt; <a href="index.source.html" class="el_package">com.demo.resortslite</a> &gt; <span class="el_source">ReportService.java</span></div><h1>ReportService.java</h1><pre class="source lang-java linenums">package com.demo.resortslite;
+
+import org.springframework.stereotype.Service;
+
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+<span class="fc" id="L17">public class ReportService {</span>
+
+    // NOTE: Hardcoded absolute paths break containerisation.
+    // These should be externalised to environment variables or use cloud object storage
+    // (S3 / Azure Blob). Kept here for backward compatibility; override via env vars.
+<span class="fc" id="L22">    private static final String REPORT_BASE_PATH = System.getenv().getOrDefault(</span>
+            &quot;REPORT_BASE_PATH&quot;, &quot;/var/legacy/reports/&quot;);
+
+    // NOTE: Windows-style backup path replaced with a cross-platform default.
+    // Override via environment variable for OS-specific deployments.
+<span class="fc" id="L27">    private static final String BACKUP_PATH = System.getenv().getOrDefault(</span>
+            &quot;BACKUP_PATH&quot;, &quot;/var/legacy/backups/nightly/&quot;);
+
+    // NOTE: Server port should be managed by the container orchestrator (ECS/EKS).
+    // Kept as a reference value; actual binding is controlled by server.port property.
+<span class="fc" id="L32">    private static final int SERVER_PORT = Integer.parseInt(</span>
+<span class="fc" id="L33">            System.getenv().getOrDefault(&quot;SERVER_PORT&quot;, &quot;8080&quot;));</span>
+
+    /**
+     * Generates a monthly booking report as a CSV file.
+     *
+     * &lt;p&gt;Uses try-with-resources to ensure the {@link FileWriter} is always closed,
+     * and specifies {@link StandardCharsets#UTF_8} explicitly to avoid platform-default
+     * charset issues introduced in Java 18+ (JEP 400).&lt;/p&gt;
+     *
+     * @param month the month label (e.g., &quot;March&quot;)
+     * @param year  the four-digit year (e.g., &quot;2024&quot;)
+     * @return a result map containing status and file path, or an error message
+     */
+    public Map&lt;String, Object&gt; generateMonthlyReport(String month, String year) {
+<span class="fc" id="L47">        String fileName = &quot;resort_report_&quot; + month + &quot;_&quot; + year + &quot;.csv&quot;;</span>
+<span class="fc" id="L48">        Path reportDir = Paths.get(REPORT_BASE_PATH);</span>
+<span class="fc" id="L49">        Path fullPath = reportDir.resolve(fileName);</span>
+
+<span class="fc" id="L51">        Map&lt;String, Object&gt; result = new HashMap&lt;&gt;();</span>
+
+        try {
+            // Create report directory if it does not exist
+<span class="nc" id="L55">            Files.createDirectories(reportDir);</span>
+
+            // Fixed: FileWriter now uses explicit UTF-8 charset (Java 18+ default-charset change)
+            // Fixed: try-with-resources ensures FileWriter is always closed (resource leak fix)
+<span class="nc" id="L59">            try (FileWriter writer = new FileWriter(fullPath.toFile(), StandardCharsets.UTF_8)) {</span>
+<span class="nc" id="L60">                writer.write(&quot;BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n&quot;);</span>
+<span class="nc" id="L61">                writer.write(&quot;BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n&quot;);</span>
+<span class="nc" id="L62">                writer.write(&quot;BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n&quot;);</span>
+            }
+
+<span class="nc" id="L65">            result.put(&quot;status&quot;, &quot;generated&quot;);</span>
+<span class="nc" id="L66">            result.put(&quot;path&quot;, fullPath.toString());</span>
+<span class="nc" id="L67">            result.put(&quot;serverPort&quot;, SERVER_PORT);</span>
+
+<span class="fc" id="L69">        } catch (IOException e) {</span>
+<span class="fc" id="L70">            result.put(&quot;status&quot;, &quot;error&quot;);</span>
+<span class="fc" id="L71">            result.put(&quot;message&quot;, e.getMessage());</span>
+<span class="nc" id="L72">        }</span>
+
+<span class="fc" id="L74">        return result;</span>
+    }
+
+    /**
+     * Builds the download URL for a named report.
+     *
+     * &lt;p&gt;NOTE: The URL scheme should be HTTPS in production. The base URL should be
+     * externalised to an environment variable for cloud deployments.&lt;/p&gt;
+     *
+     * @param reportName the name of the report file
+     * @return the download URL string
+     */
+    public String buildReportDownloadUrl(String reportName) {
+        // NOTE: Use HTTPS and externalise the base URL via environment variable
+        // for cloud-native deployments (cloud security standards enforce HTTPS).
+<span class="fc" id="L89">        String baseUrl = System.getenv().getOrDefault(</span>
+                &quot;REPORT_DOWNLOAD_BASE_URL&quot;, &quot;https://reports.resorts-internal.com:8443/download/&quot;);
+<span class="fc" id="L91">        return baseUrl + reportName;</span>
+    }
+
+    /**
+     * Returns system information including report paths and current timestamp.
+     *
+     * &lt;p&gt;Replaced legacy {@link java.util.Date} and {@link java.text.SimpleDateFormat}
+     * with the modern {@link java.time.LocalDateTime} and {@link java.time.format.DateTimeFormatter}
+     * API introduced in Java 8 and recommended for Java 25+.&lt;/p&gt;
+     *
+     * @return a map of system information key-value pairs
+     */
+    public Map&lt;String, Object&gt; getSystemInfo() {
+        // Replaced java.util.Date + SimpleDateFormat with java.time.LocalDateTime + DateTimeFormatter
+        // (modern date-time API, thread-safe, no mutable state)
+<span class="fc" id="L106">        DateTimeFormatter formatter = DateTimeFormatter.ofPattern(&quot;yyyy-MM-dd HH:mm:ss&quot;);</span>
+<span class="fc" id="L107">        String timestamp = LocalDateTime.now().format(formatter);</span>
+
+<span class="fc" id="L109">        Map&lt;String, Object&gt; info = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L110">        info.put(&quot;reportPath&quot;, REPORT_BASE_PATH);</span>
+<span class="fc" id="L111">        info.put(&quot;backupPath&quot;, BACKUP_PATH);</span>
+<span class="fc" id="L112">        info.put(&quot;serverPort&quot;, SERVER_PORT);</span>
+<span class="fc" id="L113">        info.put(&quot;generatedAt&quot;, timestamp);</span>
+<span class="fc" id="L114">        return info;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>
