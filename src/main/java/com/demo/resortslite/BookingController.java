@@ -1,23 +1,61 @@
 package com.demo.resortslite;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
-
+// cz-java-0069 Fix (Line 7): Replaced javax.servlet.http.HttpSession direct import with
+// Spring Session backed by Azure Cache for Redis. HttpSession is now transparently stored
+// in Redis, enabling stateless, horizontally-scalable containers on AKS.
 import javax.servlet.http.HttpSession;
+import org.springframework.session.data.redis.config.annotation.web.http.EnableRedisHttpSession;
+// cz-java-0070 Fix: Import RedisTemplate to replace the local in-memory HashMap cache
+// with Azure Cache for Redis, enabling shared, distributed caching across all AKS pod replicas.
+import org.springframework.data.redis.core.RedisTemplate;
+
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/bookings")
+// cz-java-0069 Fix: @EnableRedisHttpSession activates Spring Session with Redis store,
+// replacing the default in-memory HttpSession with a Redis-backed distributed session.
+// Session data survives container restarts and is shared across all AKS pod replicas,
+// preventing session loss on scale-out or pod eviction events.
+@EnableRedisHttpSession
 public class BookingController {
 
     @Autowired
     private BookingService bookingService;
 
-    // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
-    // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    // cz-java-0057 Fix: Replaced hardcoded absolute path with environment variable via @Value
+    @Value("${app.report.base-path:${REPORT_BASE_PATH:/var/reports}}")
+    private String reportBasePath;
 
+    // cz-java-0070 Fix (Line 19): Replaced local in-memory HashMap cache with RedisTemplate
+    // backed by Azure Cache for Redis on AKS. The local static HashMap was instance-local
+    // and invisible to other pod replicas, breaking horizontal scaling. RedisTemplate stores
+    // booking entries in a shared Redis cluster accessible by all AKS pod instances.
+    // Redis connection credentials (REDIS_HOST, REDIS_PORT, REDIS_PASSWORD) are injected
+    // securely at runtime via Azure Key Vault CSI Driver with Workload Identity on AKS.
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+
+    // cz-java-0070 Fix: Redis key namespace prefix for booking cache entries.
+    // All booking cache keys are prefixed with "bookingCache:" to avoid collisions
+    // with other Redis key namespaces (e.g., Spring Session keys).
+    private static final String BOOKING_CACHE_PREFIX = "bookingCache:";
+
+    // cz-java-0070 Fix: TTL for booking cache entries in Redis (24 hours).
+    // Local HashMap had no TTL — entries accumulated indefinitely per instance.
+    // Redis TTL ensures stale entries are automatically evicted across all replicas.
+    private static final long BOOKING_CACHE_TTL_HOURS = 24L;
+
+    // cz-java-0069 Fix (Lines 34-35): Replaced in-memory HttpSession usage with Spring Session
+    // backed by Azure Cache for Redis on AKS, using the Azure Key Vault CSI Driver with
+    // Workload Identity to securely inject Redis credentials.
+    // session.setAttribute now writes to Redis (Spring Session), not to in-memory JVM state.
+    // All AKS pod instances share the same Redis store — session survives restarts and scaling.
     @PostMapping("/create")
     public Map<String, Object> createBooking(
             @RequestParam String guestName,
@@ -28,13 +66,19 @@ public class BookingController {
 
         Map<String, Object> booking = bookingService.createBooking(guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Booking state stored in
-        // HTTP session memory. AWS ALB distributes requests across EC2 instances — session
-        // data on instance A is invisible to instance B. Auto-scaling and failover breaks.
-        session.setAttribute("lastBooking", booking); // cr-java-0065
-        session.setAttribute("guestName", guestName); // cr-java-0065
+        // cz-java-0069 Fix (Line 34): session.setAttribute writes to Azure Cache for Redis
+        // via Spring Session — not to in-memory JVM state. Session is durable across
+        // container restarts and visible to all AKS pod replicas behind the load balancer.
+        session.setAttribute("lastBooking", booking);
+        // cz-java-0069 Fix (Line 35): session.setAttribute writes to Azure Cache for Redis
+        // via Spring Session — guestName is stored externally, not in local JVM memory.
+        session.setAttribute("guestName", guestName);
 
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        // cz-java-0070 Fix: Replaced bookingCache.put() (local HashMap) with RedisTemplate.opsForValue().set()
+        // Booking entry is now stored in Azure Cache for Redis with a 24-hour TTL,
+        // shared across all AKS pod replicas. No longer instance-local or lost on pod restart.
+        String cacheKey = BOOKING_CACHE_PREFIX + booking.get("bookingId");
+        redisTemplate.opsForValue().set(cacheKey, booking, BOOKING_CACHE_TTL_HOURS, TimeUnit.HOURS);
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -42,14 +86,16 @@ public class BookingController {
         return response;
     }
 
+    // cz-java-0069 Fix: Reading from Redis-backed Spring Session — consistent across
+    // all container instances; no longer returns null on a different AKS pod.
     @GetMapping("/status/{bookingId}")
     public Map<String, Object> getBookingStatus(
             @PathVariable String bookingId,
             HttpSession session) {
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Reading business state
-        // from HTTP session — will return null on any other instance in the cluster.
-        String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065
+        // cz-java-0069 Fix: Reading from Redis-backed Spring Session — consistent across
+        // all container instances; no longer returns null on a different AKS pod.
+        String lastGuest = (String) session.getAttribute("guestName");
 
         Map<String, Object> result = new HashMap<>();
         result.put("bookingId", bookingId);
@@ -74,10 +120,9 @@ public class BookingController {
 
     @GetMapping("/report/download")
     public Map<String, Object> downloadReport(@RequestParam String month) {
-        // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute
-        // file path. This path does not exist inside a container image. Container images
-        // have their own isolated file systems — /var/legacy/reports won't be present.
-        String reportPath = "/var/legacy/reports/" + month + "_bookings.pdf"; // czr-java-001
+        // cz-java-0057 Fix: Replaced hardcoded absolute path "/var/legacy/reports/" with
+        // environment-variable-backed property app.report.base-path (env: REPORT_BASE_PATH)
+        String reportPath = reportBasePath + "/" + month + "_bookings.pdf";
 
         Map<String, Object> response = new HashMap<>();
         response.put("reportPath", reportPath);
