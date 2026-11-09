@@ -1,5 +1,6 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -16,16 +17,19 @@ public class ReportService {
     // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
     // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
     // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    @Value("${REPORT_BASE_PATH:/tmp/reports/}")
+    private String REPORT_BASE_PATH; // cz-java-0057: replaced hardcoded path with env var REPORT_BASE_PATH
 
     // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
     // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    @Value("${BACKUP_PATH:/tmp/backups/}")
+    private String BACKUP_PATH; // cz-java-0057: replaced hardcoded Windows path with env var BACKUP_PATH
 
     // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
     // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
     // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    @Value("${SERVER_PORT:8080}")
+    private int SERVER_PORT; // cz-java-0061: replaced hardcoded port with env var SERVER_PORT
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
