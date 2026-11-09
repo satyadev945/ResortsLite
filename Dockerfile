@@ -58,8 +58,8 @@ ENV SERVER_PORT=8080
 ENV REDIS_HOST=localhost
 ENV REDIS_PORT=6379
 
-# Oracle datasource — injected at runtime via Kubernetes secrets/configmaps
-ENV SPRING_DATASOURCE_URL=jdbc:oracle:thin:@localhost:1521:ORCL
+# PostgreSQL datasource — injected at runtime via Kubernetes secrets/configmaps
+ENV SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/resortslite
 ENV SPRING_DATASOURCE_USERNAME=admin
 ENV SPRING_DATASOURCE_PASSWORD=changeme
 

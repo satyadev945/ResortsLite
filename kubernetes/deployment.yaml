@@ -36,7 +36,7 @@ spec:
             - name: JAVA_OPTS
               value: "-Xmx512m -Xms256m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
 
-            # Oracle datasource — replace with Kubernetes Secret references in production
+            # PostgreSQL datasource — replace with Kubernetes Secret references in production
             - name: SPRING_DATASOURCE_URL
               value: "{{SPRING_DATASOURCE_URL}}"
             - name: SPRING_DATASOURCE_USERNAME
