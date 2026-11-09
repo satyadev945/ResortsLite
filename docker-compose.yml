@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  resortslite:
+    image: resortslite:latest
+    container_name: resortslite-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
+      - TZ=UTC
+      # Oracle Database connection (provide via .env or environment)
+      - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL:-jdbc:oracle:thin:@<DB_HOST>:1521:<DB_SID>}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME:-admin}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD:-changeme}
+      # Redis / ElastiCache connection
+      - REDIS_HOST=${REDIS_HOST:-localhost}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_SSL=${REDIS_SSL:-false}
+      # Internal service endpoints
+      - PAYMENT_API_URL=${PAYMENT_API_URL:-http://payment-service.payments.svc.cluster.local:9090/payments/charge}
+      # File paths (mount volumes or override)
+      - REPORTS_BASE_PATH=${REPORTS_BASE_PATH:-/mnt/reports}
+      - BACKUP_PATH=${BACKUP_PATH:-/mnt/backups}
+    volumes:
+      - reports-data:/mnt/reports
+      - backup-data:/mnt/backups
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  reports-data:
+  backup-data:
+
+networks:
+  app-network:
+    driver: bridge
