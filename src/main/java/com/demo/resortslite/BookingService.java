@@ -2,6 +2,7 @@ package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
@@ -15,12 +16,22 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
-    private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    // cr-java-0069 FIX: Hard-coded database credentials replaced with Google Secret Manager
+    // integration via Spring Cloud GCP Secret Manager. Credentials are now resolved at
+    // runtime from GCP Secret Manager secrets using the sm:// URI scheme, injected through
+    // Spring's @Value annotation and application.properties bootstrap configuration.
+    // Secret references are defined in application.properties as:
+    //   app.db.host=${sm://projects/<PROJECT_ID>/secrets/db-host/versions/latest}
+    //   app.db.user=${sm://projects/<PROJECT_ID>/secrets/db-user/versions/latest}
+    //   app.db.pass=${sm://projects/<PROJECT_ID>/secrets/db-pass/versions/latest}
+    @Value("${app.db.host}")
+    private String dbHost;
+
+    @Value("${app.db.user}")
+    private String dbUser;
+
+    @Value("${app.db.pass}")
+    private String dbPass;
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
@@ -50,7 +61,7 @@ public class BookingService {
         booking.put("checkIn", checkIn);
         booking.put("checkOut", checkOut);
         booking.put("confirmationCode", confirmCode);
-        booking.put("dbHost", DB_HOST);
+        booking.put("dbHost", dbHost);
         return booking;
     }
 

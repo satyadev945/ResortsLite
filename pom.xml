@@ -19,16 +19,66 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <!-- Spring Cloud GCP version compatible with Spring Boot 2.7.x -->
+        <spring-cloud-gcp.version>3.7.8</spring-cloud-gcp.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.google.cloud</groupId>
+                <artifactId>libraries-bom</artifactId>
+                <version>26.32.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- cr-java-0065 FIX: Spring Session with Redis — replaces in-memory HTTP session storage
+             with Google Cloud Memorystore for Redis. Spring Session transparently intercepts all
+             HttpSession operations and stores/retrieves session data in Redis, enabling stateless
+             application architecture with centralized session management across distributed instances. -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <!-- Spring Data Redis — Lettuce client for connecting to GCP Memorystore for Redis -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- cr-java-0067 FIX: Jackson JSON serializer for RedisTemplate — enables
+             Map<String, Object> booking cache entries to be serialised as JSON in
+             Google Cloud Memorystore for Redis. GenericJackson2JsonRedisSerializer is
+             configured in RedisConfig so that all application instances can deserialise
+             cache entries regardless of which instance originally wrote them. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <!-- Google Cloud Storage SDK — replaces hard-coded local file system paths (cr-java-0061) -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-storage</artifactId>
+        </dependency>
+        <!-- cr-java-0069 FIX: Spring Cloud GCP Secret Manager — resolves hard-coded DB credentials
+             at runtime from GCP Secret Manager using the sm:// URI scheme in application.properties.
+             Credentials (db-host, db-user, db-pass) are stored as versioned secrets in GCP and
+             injected into Spring @Value fields without ever appearing in source code or git history. -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>spring-cloud-gcp-starter-secretmanager</artifactId>
+            <version>${spring-cloud-gcp.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
