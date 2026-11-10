@@ -1,8 +1,14 @@
 package com.demo.resortslite;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
+
+// cz-java-0063: HttpSession is transparently backed by Spring Session + ElastiCache (Redis)
 import javax.servlet.http.HttpSession;
 import java.util.HashMap;
 import java.util.Map;
@@ -14,9 +20,21 @@ public class BookingController {
     @Autowired
     private BookingService bookingService;
 
-    // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
-    // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    @Value("${REPORT_BASE_PATH:${app.report.base-path:reports/}}")
+    private String reportBasePath; // czr-java-001 (externalised via ConfigMap env var REPORT_BASE_PATH)
+
+    // cz-java-0070: local in-memory cache replaced by Amazon ElastiCache (Redis) so the cache is
+    // shared across all pods. Connection details come from ConfigMap/Secret env vars (REDIS_HOST, ...).
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Value("${BOOKING_CACHE_TTL_SECONDS:3600}")
+    private long bookingCacheTtlSeconds;
+
+    @Value("${BOOKING_CACHE_PREFIX:resortslite:booking:}")
+    private String bookingCachePrefix;
 
     @PostMapping("/create")
     public Map<String, Object> createBooking(
@@ -28,13 +46,13 @@ public class BookingController {
 
         Map<String, Object> booking = bookingService.createBooking(guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Booking state stored in
-        // HTTP session memory. AWS ALB distributes requests across EC2 instances — session
-        // data on instance A is invisible to instance B. Auto-scaling and failover breaks.
-        session.setAttribute("lastBooking", booking); // cr-java-0065
-        session.setAttribute("guestName", guestName); // cr-java-0065
+        // cz-java-0063: session is externalised to ElastiCache (Redis) via Spring Session,
+        // so session data is shared across all pods/instances.
+        // cz-java-0069: attributes are stored in the Redis-backed Spring Session (serializable HashMap/String values)
+        session.setAttribute("lastBooking", new HashMap<>(booking)); // cz-java-0069
+        session.setAttribute("guestName", guestName); // cz-java-0069
 
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        cacheBooking((String) booking.get("bookingId"), booking); // cz-java-0070
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -47,8 +65,7 @@ public class BookingController {
             @PathVariable String bookingId,
             HttpSession session) {
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Reading business state
-        // from HTTP session — will return null on any other instance in the cluster.
+        // cz-java-0063: session read from Redis-backed Spring Session (shared across pods).
         String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065
 
         Map<String, Object> result = new HashMap<>();
@@ -77,11 +94,21 @@ public class BookingController {
         // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute
         // file path. This path does not exist inside a container image. Container images
         // have their own isolated file systems — /var/legacy/reports won't be present.
-        String reportPath = "/var/legacy/reports/" + month + "_bookings.pdf"; // czr-java-001
+        String reportPath = reportBasePath + month + "_bookings.pdf"; // czr-java-001
 
         Map<String, Object> response = new HashMap<>();
         response.put("reportPath", reportPath);
         response.put("message", bookingService.generateReport(month));
         return response;
+    }
+
+    // cz-java-0070: write-through to shared Redis cache with TTL; cache failures must not break booking
+    private void cacheBooking(String bookingId, Map<String, Object> booking) {
+        try {
+            redisTemplate.opsForValue().set(bookingCachePrefix + bookingId,
+                    objectMapper.writeValueAsString(booking), Duration.ofSeconds(bookingCacheTtlSeconds));
+        } catch (Exception e) {
+            // best-effort cache; ignore failures
+        }
     }
 }
