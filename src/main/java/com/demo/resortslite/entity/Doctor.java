@@ -13,14 +13,14 @@ public class Doctor {
 
 	@Column(name="DOC_ID")
 	@Id
-	// SQL Server uses an IDENTITY column; Oracle uses a sequence (CNO_SEQ)
+	// PostgreSQL uses an IDENTITY/SERIAL column; Oracle uses a sequence (CNO_SEQ)
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer docId;
 
-	@Column(name="DOC_NAME",length=25)
+	@Column(name="DOC_NAME",length=25,columnDefinition = "varchar(255)")
 	private String docName;
 
-	@Column(name="SPECIALIZATION",length=20)
+	@Column(name="SPECIALIZATION",length=20,columnDefinition = "varchar(255)")
 	private String specialization;
 
 	@Column(name="INCOME")
