@@ -1,7 +1,11 @@
 package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.azure.identity.DefaultAzureCredentialBuilder;
+import com.azure.security.keyvault.secrets.SecretClient;
+import com.azure.security.keyvault.secrets.SecretClientBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
@@ -15,12 +19,47 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
-    // If this repo is pushed to GitHub (even private), credentials are permanently exposed
-    // in git history. AWS Secrets Manager or Parameter Store must be used instead.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+
+    // Database credentials are no longer hard-coded. They are stored in Azure Key Vault and
+    // resolved at runtime using DefaultAzureCredential (managed identity / env / CLI).
+    @Value("${app.azure.keyvault.uri:${AZURE_KEYVAULT_URI:}}")
+    private String keyVaultUri;
+
+    @Value("${app.azure.keyvault.db-username-secret:db-username}")
+    private String dbUsernameSecretName;
+
+    @Value("${app.azure.keyvault.db-password-secret:db-password}")
+    private String dbPasswordSecretName;
+
+    private volatile SecretClient secretClient;
+
+    private SecretClient getSecretClient() {
+        if (secretClient == null) {
+            synchronized (this) {
+                if (secretClient == null) {
+                    if (keyVaultUri == null || keyVaultUri.isEmpty()) {
+                        throw new IllegalStateException("Azure Key Vault URI is not configured (AZURE_KEYVAULT_URI)");
+                    }
+                    secretClient = new SecretClientBuilder()
+                            .vaultUrl(keyVaultUri)
+                            .credential(new DefaultAzureCredentialBuilder().build())
+                            .buildClient();
+                }
+            }
+        }
+        return secretClient;
+    }
+
+    /** Retrieves the database user name from Azure Key Vault. */
+    String getDbUser() {
+        return getSecretClient().getSecret(dbUsernameSecretName).getValue();
+    }
+
+    /** Retrieves the database password from Azure Key Vault. */
+    String getDbPass() {
+        return getSecretClient().getSecret(dbPasswordSecretName).getValue();
+    }
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
