@@ -16,6 +16,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
+// Binary report content is handled as byte[] (PostgreSQL BYTEA via getBytes()/setBytes());
+// no SQL Server IMAGE / Blob streaming is used.
 @Service
 public class ReportService {
 
