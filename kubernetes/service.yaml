@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-msql-service
+  namespace: java-msql
+  labels:
+    app: java-msql
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app: java-msql
