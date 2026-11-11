@@ -19,8 +19,21 @@ public class BookingService {
     // If this repo is pushed to GitHub (even private), credentials are permanently exposed
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    // Database credentials are no longer embedded in source; they are retrieved from
+    // Azure Key Vault (DefaultAzureCredential) on demand. cr-java-0069
+    private static final String DB_USER_SECRET = "db-username";
+    private static final String DB_PASS_SECRET = "db-password";
+
+    @Autowired
+    private KeyVaultSecretProvider secretProvider;
+
+    String getDbUser() {
+        return secretProvider.getSecret(DB_USER_SECRET);
+    }
+
+    String getDbPass() {
+        return secretProvider.getSecret(DB_PASS_SECRET);
+    }
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,

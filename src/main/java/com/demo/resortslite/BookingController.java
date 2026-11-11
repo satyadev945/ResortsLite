@@ -3,7 +3,6 @@ package com.demo.resortslite;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import javax.servlet.http.HttpSession;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -14,27 +13,25 @@ public class BookingController {
     @Autowired
     private BookingService bookingService;
 
-    // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
-    // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    @Autowired
+    private BookingStateStore bookingStateStore;
+
+    // cr-java-0067 fix: the static in-memory HashMap cache (no TTL, instance-local) was removed.
+    // Booking data is cached in Azure Cache for Redis via BookingStateStore, with a TTL
+    // (app.state.ttl-minutes), so it is distributed across instances and expires automatically.
 
     @PostMapping("/create")
     public Map<String, Object> createBooking(
             @RequestParam String guestName,
             @RequestParam String roomType,
             @RequestParam String checkIn,
-            @RequestParam String checkOut,
-            HttpSession session) {
+            @RequestParam String checkOut) {
 
         Map<String, Object> booking = bookingService.createBooking(guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Booking state stored in
-        // HTTP session memory. AWS ALB distributes requests across EC2 instances — session
-        // data on instance A is invisible to instance B. Auto-scaling and failover breaks.
-        session.setAttribute("lastBooking", booking); // cr-java-0065
-        session.setAttribute("guestName", guestName); // cr-java-0065
-
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        // cr-java-0065 fix: booking state is externalised to Azure Cache for Redis instead of
+        // HTTP session memory, so any instance can serve subsequent requests.
+        bookingStateStore.saveBooking((String) booking.get("bookingId"), guestName, booking);
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -44,12 +41,10 @@ public class BookingController {
 
     @GetMapping("/status/{bookingId}")
     public Map<String, Object> getBookingStatus(
-            @PathVariable String bookingId,
-            HttpSession session) {
+            @PathVariable String bookingId) {
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Reading business state
-        // from HTTP session — will return null on any other instance in the cluster.
-        String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065
+        // cr-java-0065 fix: read state from Azure Cache for Redis rather than HTTP session.
+        String lastGuest = bookingStateStore.getGuestName(bookingId);
 
         Map<String, Object> result = new HashMap<>();
         result.put("bookingId", bookingId);
