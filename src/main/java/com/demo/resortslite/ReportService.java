@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
+// Report content is handled as byte[] (PostgreSQL BYTEA via getBytes()/setBytes()), not SQL Server IMAGE.
 @Service
 public class ReportService {
 

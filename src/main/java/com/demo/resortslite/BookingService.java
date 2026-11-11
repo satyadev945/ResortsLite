@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
+import java.util.UUID; // maps to PostgreSQL UUID type (not UNIQUEIDENTIFIER)
 
 @Service
 public class BookingService {
@@ -20,7 +20,7 @@ public class BookingService {
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
-    // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
+    // hostname (no SQL Server temp tables are used; PostgreSQL uses CREATE TEMPORARY TABLE or CTEs). Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
     private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
 
@@ -29,6 +29,7 @@ public class BookingService {
         String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
         // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
+        // (bookingId is a text key; if stored as a UUID column use PostgreSQL UUID.)
         // An attacker can pass guestName = "'; DROP TABLE bookings; --" to destroy data.
         // Use parameterised queries (JdbcTemplate with '?') to prevent SQL injection.
         String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES ('" // sql-inject-001
@@ -106,6 +107,7 @@ public class BookingService {
             byte[] hash = md.digest(input.getBytes());
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
+            // hash is hex text; binary data would use byte[] with PostgreSQL BYTEA (Types.BINARY)
             return sb.toString();
         } catch (Exception e) {
             return input;
