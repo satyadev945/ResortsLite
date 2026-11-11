@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resortslite
+  namespace: resortslite
+  labels:
+    app: resortslite
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: resortslite
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: resortslite
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: resortslite
+          image: "{{IMAGE_URI}}"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "docker"
+            - name: TZ
+              value: "UTC"
+            - name: JAVA_OPTS
+              value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Dfile.encoding=UTF-8"
+            - name: SERVER_PORT
+              value: "8080"
+            - name: REDIS_HOST
+              value: "{{REDIS_HOST}}"
+            - name: REDIS_PORT
+              value: "{{REDIS_PORT}}"
+            - name: REDIS_SSL_ENABLED
+              value: "{{REDIS_SSL_ENABLED}}"
+            - name: PAYMENT_API_URL
+              value: "{{PAYMENT_API_URL}}"
+            - name: REPORT_BASE_PATH
+              value: "/app/reports/"
+            - name: BACKUP_PATH
+              value: "/app/backups/"
+            # Sensitive values come from the 'resortslite-secrets' Secret (created by deploy-image script)
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: resortslite-secrets
+                  key: SPRING_DATASOURCE_URL
+                  optional: true
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: resortslite-secrets
+                  key: SPRING_DATASOURCE_USERNAME
+                  optional: true
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: resortslite-secrets
+                  key: SPRING_DATASOURCE_PASSWORD
+                  optional: true
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: resortslite-secrets
+                  key: REDIS_PASSWORD
+                  optional: true
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: reports
+              mountPath: /app/reports
+            - name: backups
+              mountPath: /app/backups
+      volumes:
+        - name: reports
+          emptyDir: {}
+        - name: backups
+          emptyDir: {}

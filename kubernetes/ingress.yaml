@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: resortslite-ingress
+  namespace: resortslite
+  labels:
+    app: resortslite
+  annotations:
+    kubernetes.io/ingress.class: azure/application-gateway
+    appgw.ingress.kubernetes.io/health-probe-path: /actuator/health/liveness
+    appgw.ingress.kubernetes.io/request-timeout: "60"
+spec:
+  rules:
+    - host: "{{INGRESS_HOST}}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: resortslite-service
+                port:
+                  number: 80
