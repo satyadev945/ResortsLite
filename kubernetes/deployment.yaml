@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resortslite
+  namespace: resortslite
+  labels:
+    app: resortslite
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: resortslite
+  template:
+    metadata:
+      labels:
+        app: resortslite
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+        - name: resortslite
+          image: "{{IMAGE_URI}}"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "docker"
+            - name: SERVER_PORT
+              value: "8080"
+            - name: TZ
+              value: "UTC"
+            - name: JAVA_OPTS
+              value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Duser.timezone=UTC -Djava.security.egd=file:/dev/./urandom"
+            - name: REPORT_BASE_PATH
+              value: "/app/reports/"
+            - name: REPORT_BACKUP_PATH
+              value: "/app/backups/"
+          # Optional externalised config created by scripts/deploy-image.* :
+          #   ConfigMap resortslite-config: REDIS_HOST, REDIS_PORT, REDIS_SSL_ENABLED, SPRING_DATASOURCE_URL,
+          #                                 SPRING_DATASOURCE_USERNAME, APP_PAYMENT_ENDPOINT, APP_INVENTORY_ENDPOINT,
+          #                                 APP_NOTIFICATION_ENDPOINT, SESSION_REDIS_NAMESPACE, SESSION_TIMEOUT,
+          #                                 BOOKING_CACHE_KEY_PREFIX, BOOKING_CACHE_TTL_SECONDS
+          #   Secret resortslite-secret:    SPRING_DATASOURCE_PASSWORD, REDIS_PASSWORD
+          envFrom:
+            - configMapRef:
+                name: resortslite-config
+                optional: true
+            - secretRef:
+                name: resortslite-secret
+                optional: true
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: reports
+              mountPath: /app/reports
+            - name: backups
+              mountPath: /app/backups
+      volumes:
+        - name: reports
+          emptyDir: {}
+        - name: backups
+          emptyDir: {}
