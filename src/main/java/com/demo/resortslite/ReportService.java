@@ -14,9 +14,7 @@ import java.util.Map;
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
+    // Report base path is externalised (volume mount / env var); binary content uses PostgreSQL BYTEA, no IMAGE type.
     @Value("${app.report.base-path:./reports/}")
     private String reportBasePath; // czr-java-001 - injected via REPORT_BASE_PATH (ConfigMap)
 
