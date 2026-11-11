@@ -17,10 +17,10 @@ public class Doctor {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer docId;
 
-	@Column(name="DOC_NAME",length=25)
+	@Column(name="DOC_NAME",length=25, columnDefinition="VARCHAR(25)")
 	private String docName;
 
-	@Column(name="SPECIALIZATION",length=20)
+	@Column(name="SPECIALIZATION",length=20, columnDefinition="VARCHAR(20)")
 	private String specialization;
 
 	@Column(name="INCOME")
