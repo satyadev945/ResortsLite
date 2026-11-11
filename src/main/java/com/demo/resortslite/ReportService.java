@@ -14,6 +14,7 @@ import java.util.Map;
 @Service
 public class ReportService {
 
+    // Report content is stored in PostgreSQL BYTEA columns (not SQL Server IMAGE); use getBytes()/setBytes().
     // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
     // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
     // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.

@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
+// java.util.UUID maps to PostgreSQL UUID (replaces SQL Server UNIQUEIDENTIFIER)
 import java.util.UUID;
 
 @Service
@@ -20,7 +21,8 @@ public class BookingService {
     // If this repo is pushed to GitHub (even private), credentials are permanently exposed
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
+    // PostgreSQL: use CREATE TEMPORARY TABLE / CTEs instead of SQL Server #temp tables
+    private static final String DB_USER = "admin";                        // sec-cred-001
     private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
@@ -30,6 +32,7 @@ public class BookingService {
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
+        // Booking ids are generated from java.util.UUID (PostgreSQL UUID type)
         String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
         // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
@@ -107,7 +110,8 @@ public class BookingService {
     private String md5Hash(String input) { // sec-weak-hash-001
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256"); // sec-weak-hash-001
-            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            // byte[] maps to PostgreSQL BYTEA (use Types.BINARY, not VARBINARY)
+            byte[] hash =md.digest(input.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
             return sb.toString();
