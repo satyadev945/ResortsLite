@@ -15,6 +15,8 @@ import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+// PostgreSQL: binary report content is stored as BYTEA (byte[] via setBytes()/getBytes()),
+// replacing the SQL Server IMAGE type.
 
 @Service
 public class ReportService {

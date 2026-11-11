@@ -51,10 +51,11 @@
             <artifactId>commons-collections</artifactId>
             <version>3.2.1</version>
         </dependency>
-        <!-- SQL Server JDBC (Java 8) — version managed by Spring Boot 2.7 BOM -->
+        <!-- PostgreSQL JDBC driver -->
         <dependency>
-            <groupId>com.microsoft.sqlserver</groupId>
-            <artifactId>mssql-jdbc</artifactId>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.7.4</version>
             <scope>runtime</scope>
         </dependency>
         <!-- Azure Blob Storage for report/backup persistence (cr-java-0061) -->

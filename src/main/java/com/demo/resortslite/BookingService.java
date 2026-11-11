@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
+import java.util.UUID; // PostgreSQL native UUID type (replaces UNIQUEIDENTIFIER)
 
 @Service
 public class BookingService {
@@ -21,12 +21,16 @@ public class BookingService {
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
     // Database credentials are no longer embedded in source; they are retrieved from
     // Azure Key Vault (DefaultAzureCredential) on demand. cr-java-0069
+    // PostgreSQL: no SQL Server '#temp' tables are used here; if a scratch table is needed,
+    // use CREATE TEMPORARY TABLE ... ON COMMIT DROP or a WITH (CTE) query instead.
     private static final String DB_USER_SECRET = "db-username";
     private static final String DB_PASS_SECRET = "db-password";
 
     @Autowired
     private KeyVaultSecretProvider secretProvider;
 
+    // PostgreSQL: UUID values map to the native UUID type (java.util.UUID via setObject/getObject),
+    // not SQL Server UNIQUEIDENTIFIER.
     String getDbUser() {
         return secretProvider.getSecret(DB_USER_SECRET);
     }
@@ -112,6 +116,7 @@ public class BookingService {
         return true;
     }
 
+    // PostgreSQL: binary data uses BYTEA (JDBC Types.BINARY, setBytes()/getBytes()), not VARBINARY.
     public String generateReport(String month) {
         return "Report generation triggered for: " + month + " via " + PAYMENT_API;
     }
