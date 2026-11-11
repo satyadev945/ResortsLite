@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
+// Binary data uses PostgreSQL BYTEA with JDBC getBytes()/setBytes(); no SQL Server IMAGE columns.
 @Service
 public class ReportService {
 

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
+import java.util.UUID; // PostgreSQL: map to native UUID column type (not UNIQUEIDENTIFIER)
 
 @Service
 public class BookingService {
@@ -19,6 +19,8 @@ public class BookingService {
     // (DefaultAzureCredential) by DatabaseCredentialsConfig and supplied to the DataSource.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
 
+    // PostgreSQL: no SQL Server '#temp' tables are used here; if one is needed, use
+    // CREATE TEMPORARY TABLE ... or a WITH (CTE) clause instead.
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
@@ -26,6 +28,7 @@ public class BookingService {
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
+        // java.util.UUID round-trips with PostgreSQL UUID columns via the PostgreSQL JDBC driver.
         String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
         // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
@@ -103,6 +106,7 @@ public class BookingService {
     private String md5Hash(String input) { // sec-weak-hash-001
         try {
             MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
+            // byte[] maps to PostgreSQL BYTEA (JDBC getBytes()/setBytes(); Types.BINARY, not VARBINARY)
             byte[] hash = md.digest(input.getBytes());
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
