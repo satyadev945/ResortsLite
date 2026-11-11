@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
+// PostgreSQL: UNIQUEIDENTIFIER maps to native UUID type; use java.util.UUID with setObject()/getObject().
 import java.util.UUID;
 
 @Service
@@ -20,7 +21,8 @@ public class BookingService {
     // If this repo is pushed to GitHub (even private), credentials are permanently exposed
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
+    // PostgreSQL: no '#temp' tables; use CREATE TEMPORARY TABLE or WITH (CTE) in native SQL.
+    private static final String DB_USER = "admin";                      // sec-cred-001
     private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
@@ -29,6 +31,7 @@ public class BookingService {
     @Value("${PAYMENT_API_URL:http://payment-svc:9090/payments/charge}") // cz-java-0062: K8s Service DNS via ConfigMap
     private String PAYMENT_API;
 
+    // PostgreSQL: any UUID column is declared as UUID (not UNIQUEIDENTIFIER) and bound as java.util.UUID.
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
         String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
@@ -107,6 +110,7 @@ public class BookingService {
 
     private String md5Hash(String input) { // sec-weak-hash-001
         try {
+            // PostgreSQL: byte[] maps to BYTEA (not VARBINARY); use setBytes()/getBytes(); JDBC Types.BINARY if needed.
             MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
             byte[] hash = md.digest(input.getBytes());
             StringBuilder sb = new StringBuilder();

@@ -14,6 +14,7 @@ import java.util.Map;
 @Service
 public class ReportService {
 
+    // PostgreSQL: binary/LOB data uses BYTEA (no SQL Server IMAGE); access via JDBC getBytes()/setBytes().
     // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
     // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
     // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.

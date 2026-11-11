@@ -14,10 +14,10 @@ services:
       SERVER_PORT: "8080"
       TZ: UTC
       JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Duser.timezone=UTC"
-      # External SQL Server (provided separately)
-      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:sqlserver://host.docker.internal:1433;databaseName=ResortsDB;encrypt=false;trustServerCertificate=true}
-      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-admin}
-      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-changeme}
+      # PostgreSQL
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://postgres:5432/${POSTGRES_DB:-ResortsDB}}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-${POSTGRES_USER:-admin}}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-${POSTGRES_PASSWORD:-changeme}}
       # External Redis / ElastiCache (provided separately)
       REDIS_HOST: ${REDIS_HOST:-host.docker.internal}
       REDIS_PORT: ${REDIS_PORT:-6379}
@@ -36,9 +36,35 @@ services:
     volumes:
       - ./data/reports:/app/reports
       - ./data/backups:/app/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - app-network
     restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    container_name: resortslite-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ResortsDB}
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  pgdata:
 
 networks:
   app-network:
