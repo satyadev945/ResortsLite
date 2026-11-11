@@ -1,55 +1,89 @@
 package com.demo.resortslite;
 
+import com.google.cloud.storage.BlobId;
+import com.google.cloud.storage.BlobInfo;
+import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.StorageException;
+import com.google.cloud.storage.StorageOptions;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    // Reports are stored in Google Cloud Storage instead of the local file system.
+    // Bucket and object prefixes are externalised via configuration / environment variables.
+    private final String reportBucket;
+    private final String reportBasePath;
+    private final String backupPath;
+    private final String reportDownloadBaseUrl;
+    private volatile Storage storage;
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    // Server port is resolved from configuration (server.port <- PORT env var injected by GCP Cloud Run / GKE).
+    private final int serverPort;
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    public ReportService(
+            @Value("${app.report.bucket:${REPORT_BUCKET:resorts-reports}}") String reportBucket,
+            @Value("${app.report.base-path:${REPORT_BASE_PATH:reports/}}") String reportBasePath,
+            @Value("${app.report.backup-path:${REPORT_BACKUP_PATH:backups/nightly/}}") String backupPath,
+            @Value("${app.report.download-base-url}") String reportDownloadBaseUrl,
+            @Value("${server.port:${PORT:8080}}") int serverPort) {
+        this.serverPort = serverPort;
+        this.reportDownloadBaseUrl = reportDownloadBaseUrl.endsWith("/") ? reportDownloadBaseUrl : reportDownloadBaseUrl + "/";
+        this.reportBucket = reportBucket;
+        this.reportBasePath = normalizePrefix(reportBasePath);
+        this.backupPath = normalizePrefix(backupPath);
+    }
+
+    private static String normalizePrefix(String prefix) {
+        if (prefix == null || prefix.isEmpty()) {
+            return "";
+        }
+        return prefix.endsWith("/") ? prefix : prefix + "/";
+    }
+
+    private Storage storage() {
+        Storage s = storage;
+        if (s == null) {
+            synchronized (this) {
+                if (storage == null) {
+                    storage = StorageOptions.getDefaultInstance().getService();
+                }
+                s = storage;
+            }
+        }
+        return s;
+    }
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String objectName = reportBasePath + fileName;
+        String fullPath = "gs://" + reportBucket + "/" + objectName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
-            if (!reportDir.exists()) {
-                reportDir.mkdirs();
-            }
+            String content = "BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n"
+                    + "BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n"
+                    + "BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n";
 
-            FileWriter writer = new FileWriter(fullPath);
-            writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
-            writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
-            writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
-            writer.close();
+            BlobInfo blobInfo = BlobInfo.newBuilder(BlobId.of(reportBucket, objectName))
+                    .setContentType("text/csv")
+                    .build();
+            storage().create(blobInfo, content.getBytes(StandardCharsets.UTF_8));
 
             result.put("status", "generated");
             result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT); // czr-port-001
+            result.put("serverPort", serverPort);
 
-        } catch (IOException e) {
+        } catch (StorageException e) {
             result.put("status", "error");
             result.put("message", e.getMessage());
         }
@@ -63,15 +97,16 @@ public class ReportService {
     public String buildReportDownloadUrl(String reportName) { // doc-missing-001
         // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP URL
         // hardcoded for report download. Cloud security standards enforce HTTPS.
-        return "http://reports.resorts-internal.com:8080/download/" + reportName; // cr-java-0088
+        return reportDownloadBaseUrl + reportName;
     }
 
     public Map<String, Object> getSystemInfo() { // doc-missing-001
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        // Standardise on UTC (ISO-8601) rather than server-local timezone
+        String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now().atOffset(ZoneOffset.UTC));
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
-        info.put("serverPort", SERVER_PORT);        // czr-port-001
+        info.put("reportPath", "gs://" + reportBucket + "/" + reportBasePath);
+        info.put("backupPath", "gs://" + reportBucket + "/" + backupPath);
+        info.put("serverPort", serverPort);
         info.put("generatedAt", timestamp);
         return info;
     }
