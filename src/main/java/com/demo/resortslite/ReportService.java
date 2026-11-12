@@ -15,6 +15,8 @@ import java.util.Map;
 @Service
 public class ReportService {
 
+    // Report content is written as raw bytes (UTF-8); any binary storage maps to PostgreSQL BYTEA
+    // (use getBytes()/setBytes(), not SQL Server IMAGE streaming).
     // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
     // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
     // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.

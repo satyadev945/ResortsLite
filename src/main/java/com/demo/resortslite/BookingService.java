@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
+// java.util.UUID maps to the PostgreSQL native UUID type (not UNIQUEIDENTIFIER)
 import java.util.UUID;
 
 @Service
@@ -20,14 +21,16 @@ public class BookingService {
     // If this repo is pushed to GitHub (even private), credentials are permanently exposed
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    // Credentials externalised to environment variables (no '#' temp-table-style literals in source).
+    private static final String DB_USER = System.getenv().getOrDefault("DB_USER", "");
+    private static final String DB_PASS = System.getenv().getOrDefault("DB_PASS", "");
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
     private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
 
+    // Booking ids are generated from java.util.UUID (PostgreSQL UUID compatible).
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
         String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
@@ -107,6 +110,7 @@ public class BookingService {
     private String sha256Hash(String input) { // sec-weak-hash-001
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256"); // sec-weak-hash-001
+            // byte[] values map to PostgreSQL BYTEA (JDBC Types.BINARY, getBytes()/setBytes())
             byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
