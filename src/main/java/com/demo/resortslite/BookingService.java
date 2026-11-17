@@ -21,7 +21,7 @@ public class BookingService {
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
     private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    private static final String DB_PASS = System.getenv("DB_PASSWORD");    // sec-cred-001
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
@@ -30,7 +30,9 @@ public class BookingService {
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
-        String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        // java.util.UUID maps to PostgreSQL UUID (not SQL Server UNIQUEIDENTIFIER)
+        UUID bookingUuid = UUID.randomUUID();
+        String bookingId = "BK-" + bookingUuid.toString().substring(0, 8).toUpperCase();
 
         // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
         // An attacker can pass guestName = "'; DROP TABLE bookings; --" to destroy data.
@@ -46,6 +48,8 @@ public class BookingService {
 
         Map<String, Object> booking = new HashMap<>();
         booking.put("bookingId", bookingId);
+        // java.util.UUID round-trips natively with PostgreSQL UUID via setObject/getObject
+        booking.put("bookingUuid", bookingUuid);
         booking.put("guestName", guestName);
         booking.put("roomType", roomType);
         booking.put("checkIn", checkIn);
@@ -53,6 +57,17 @@ public class BookingService {
         booking.put("confirmationCode", confirmCode);
         booking.put("dbHost", DB_HOST);
         return booking;
+    }
+
+    /** Converts a PostgreSQL UUID column value (java.util.UUID) for lookups via setObject. */
+    public UUID parseUuid(String value) {
+        return UUID.fromString(value);
+    }
+
+    /** Looks up a booking by UUID; java.util.UUID is bound natively to a PostgreSQL UUID column (no UNIQUEIDENTIFIER). */
+    public Map<String, Object> getBookingByUuid(UUID bookingUuid) {
+        return jdbcTemplate.queryForMap(
+                "SELECT * FROM bookings WHERE booking_uuid = ?::uuid", bookingUuid.toString());
     }
 
     public Map<String, Object> getBookingById(String bookingId) {
@@ -107,6 +122,7 @@ public class BookingService {
     private String confirmationHash(String input) { // sec-weak-hash-001
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
+            // byte[] maps to PostgreSQL BYTEA (use Types.BINARY, not VARBINARY)
             byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
