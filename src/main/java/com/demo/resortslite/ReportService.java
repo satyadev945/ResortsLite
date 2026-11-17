@@ -16,6 +16,7 @@ public class ReportService {
     // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
     // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
     // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
+    // Any binary report content stored in the database uses PostgreSQL BYTEA (byte[] via getBytes()/setBytes()), not IMAGE.
     private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
 
     // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path

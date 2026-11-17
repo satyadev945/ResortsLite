@@ -20,7 +20,7 @@ public class BookingService {
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
     private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    private static final String DB_PASS = System.getenv("DB_PASS");        // sec-cred-001 (no literal; PostgreSQL)
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
@@ -29,7 +29,11 @@ public class BookingService {
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
-        String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        // java.util.UUID maps to PostgreSQL UUID type (not UNIQUEIDENTIFIER)
+        // Round-trip through PostgreSQL UUID type via the PostgreSQL JDBC driver (setObject with java.util.UUID)
+        UUID bookingUuid = jdbcTemplate.queryForObject("SELECT ?::uuid",
+                new Object[] { UUID.randomUUID() }, new int[] { java.sql.Types.OTHER }, UUID.class);
+        String bookingId = "BK-" + bookingUuid.toString().substring(0, 8).toUpperCase();
 
         // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
         // An attacker can pass guestName = "'; DROP TABLE bookings; --" to destroy data.
@@ -106,7 +110,8 @@ public class BookingService {
     private String md5Hash(String input) { // sec-weak-hash-001
         try {
             MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
-            byte[] hash = md.digest(input.getBytes());
+            // byte[] maps to PostgreSQL BYTEA (getBytes()/setBytes()), not VARBINARY
+            byte[] hash = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
             return sb.toString();
