@@ -20,8 +20,8 @@ public class BookingService {
     // If this repo is pushed to GitHub (even private), credentials are permanently exposed
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    private static final String DB_USER = System.getenv().getOrDefault("DB_USER", "admin");
+    private static final String DB_PASS = System.getenv().getOrDefault("DB_PASS", "");
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
@@ -30,15 +30,14 @@ public class BookingService {
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
-        String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        UUID bookingUuid = UUID.randomUUID(); // maps to PostgreSQL UUID via java.util.UUID
+        String bookingId = bookingUuid.toString();
 
         // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
         // An attacker can pass guestName = "'; DROP TABLE bookings; --" to destroy data.
         // Use parameterised queries (JdbcTemplate with '?') to prevent SQL injection.
-        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES ('" // sql-inject-001
-                + bookingId + "', '" + guestName + "', '" + roomType               // sql-inject-001
-                + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
-        jdbcTemplate.execute(sql);
+        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)";
+        jdbcTemplate.update(sql, bookingUuid, guestName, roomType, checkIn, checkOut);
 
         // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
         // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
@@ -58,10 +57,10 @@ public class BookingService {
     public Map<String, Object> getBookingById(String bookingId) {
         // VIOLATION [Security Health / Critical]: SQL injection via string concatenation.
         // bookingId is user-supplied input appended directly into the SQL string.
-        String sql = "SELECT * FROM bookings WHERE id = '" + bookingId + "'"; // sql-inject-001
+        String sql = "SELECT * FROM bookings WHERE id = ?"; // PostgreSQL UUID column
         Map<String, Object> result = new HashMap<>();
         try {
-            result = jdbcTemplate.queryForMap(sql);
+            result = jdbcTemplate.queryForMap(sql, UUID.fromString(bookingId));
         } catch (Exception e) {
             result.put("error", "Booking not found: " + bookingId);
         }
