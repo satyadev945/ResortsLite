@@ -2,9 +2,12 @@ package com.demo.resortslite;
 
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
@@ -18,6 +21,27 @@ public class ReportService {
     // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
     private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
 
+    // Reports are stored in Amazon S3 (bucket configurable via REPORT_S3_BUCKET env var).
+    private static final String REPORT_BUCKET =
+            System.getenv().getOrDefault("REPORT_S3_BUCKET", "resortslite-reports");
+    private static final String REPORT_KEY_PREFIX =
+            System.getenv().getOrDefault("REPORT_S3_PREFIX", "reports/");
+
+    // S3 client uses the default AWS region/credentials provider chains (IAM role, env vars).
+    // Created lazily so application startup does not fail when AWS config is absent.
+    private volatile S3Client s3Client;
+
+    private S3Client s3() {
+        if (s3Client == null) {
+            synchronized (this) {
+                if (s3Client == null) {
+                    s3Client = S3Client.create();
+                }
+            }
+        }
+        return s3Client;
+    }
+
     // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
     // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
     private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
@@ -29,27 +53,30 @@ public class ReportService {
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String objectKey = REPORT_KEY_PREFIX + fileName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
-            if (!reportDir.exists()) {
-                reportDir.mkdirs();
-            }
+            StringBuilder csv = new StringBuilder();
+            csv.append("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
+            csv.append("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
+            csv.append("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
 
-            FileWriter writer = new FileWriter(fullPath);
-            writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
-            writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
-            writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
-            writer.close();
+            // Persist report to Amazon S3 instead of the local file system
+            s3().putObject(
+                    PutObjectRequest.builder()
+                            .bucket(REPORT_BUCKET)
+                            .key(objectKey)
+                            .contentType("text/csv")
+                            .build(),
+                    RequestBody.fromString(csv.toString(), StandardCharsets.UTF_8));
 
             result.put("status", "generated");
-            result.put("path", fullPath);
+            result.put("path", "s3://" + REPORT_BUCKET + "/" + objectKey);
             result.put("serverPort", SERVER_PORT); // czr-port-001
 
-        } catch (IOException e) {
+        } catch (SdkException e) {
             result.put("status", "error");
             result.put("message", e.getMessage());
         }
