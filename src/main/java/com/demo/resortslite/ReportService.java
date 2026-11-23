@@ -95,6 +95,7 @@ public class ReportService {
             csv.append("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
             csv.append("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
             csv.append("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
+            // Report content is held as byte[] (PostgreSQL BYTEA via getBytes()/setBytes(), not IMAGE/Blob streams).
             byte[] data = csv.toString().getBytes(StandardCharsets.UTF_8);
 
             BlobClient blobClient = getContainerClient().getBlobClient(blobName);

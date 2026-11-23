@@ -21,6 +21,10 @@ public class BookingService {
     @Autowired
     private DbCredentialsProvider dbCredentialsProvider;
 
+    // PostgreSQL temporary table (session-scoped, dropped at commit) replaces SQL Server #temp tables.
+    private static final String CREATE_TEMP_BOOKING_SQL =
+            "CREATE TEMPORARY TABLE IF NOT EXISTS temp_booking (id VARCHAR(20), booking_uuid UUID, confirm_hash BYTEA) ON COMMIT DROP";
+
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
@@ -37,6 +41,16 @@ public class BookingService {
                 + bookingId + "', '" + guestName + "', '" + roomType               // sql-inject-001
                 + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
         jdbcTemplate.execute(sql);
+
+        // PostgreSQL UUID (java.util.UUID) and BYTEA (Types.BINARY / setBytes) round-trip.
+        UUID bookingUuid = UUID.randomUUID();
+        byte[] confirmHash = md5Bytes(bookingId + guestName);
+        jdbcTemplate.update("INSERT INTO booking_audit (booking_uuid, confirm_hash) VALUES (?, ?)",
+                ps -> {
+                    // pgjdbc maps java.util.UUID natively to the PostgreSQL UUID type.
+                    ps.setObject(1, bookingUuid, java.sql.Types.OTHER);
+                    ps.setBytes(2, confirmHash);
+                });
 
         // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
         // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
@@ -100,6 +114,14 @@ public class BookingService {
 
     public String generateReport(String month) {
         return "Report generation triggered for: " + month + " via " + PAYMENT_API;
+    }
+
+    private byte[] md5Bytes(String input) {
+        try {
+            return MessageDigest.getInstance("MD5").digest(input.getBytes());
+        } catch (Exception e) {
+            return input.getBytes();
+        }
     }
 
     private String md5Hash(String input) { // sec-weak-hash-001
