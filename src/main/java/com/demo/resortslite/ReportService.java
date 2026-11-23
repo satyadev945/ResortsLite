@@ -42,11 +42,12 @@ public class ReportService {
                 reportDir.mkdirs();
             }
 
-            try (Writer writer = Files.newBufferedWriter(Path.of(fullPath), StandardCharsets.UTF_8)) {
-                writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
-                writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
-                writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
-            }
+            // Report content handled as byte[] (PostgreSQL BYTEA compatible getBytes()/setBytes() pattern)
+            String content = "BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n"
+                    + "BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n"
+                    + "BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n";
+            byte[] reportBytes = content.getBytes(StandardCharsets.UTF_8);
+            Files.write(Path.of(fullPath), reportBytes);
 
             result.put("status", "generated");
             result.put("path", fullPath);

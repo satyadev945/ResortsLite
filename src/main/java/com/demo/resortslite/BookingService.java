@@ -8,7 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
+import java.util.UUID; // PostgreSQL UUID type (not UNIQUEIDENTIFIER) round-trips via java.util.UUID
 
 @Service
 public class BookingService {
@@ -20,8 +20,9 @@ public class BookingService {
     // If this repo is pushed to GitHub (even private), credentials are permanently exposed
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
-    private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    private static final String DB_USER = System.getenv().getOrDefault("DB_USER", "");
+    // Credentials externalised; no temp-table '#' literal remains (PostgreSQL: use CREATE TEMPORARY TABLE / CTE)
+    private static final String DB_PASS = System.getenv().getOrDefault("DB_PASS", "");
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
@@ -30,15 +31,15 @@ public class BookingService {
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
-        String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        // java.util.UUID maps to PostgreSQL UUID type via the PostgreSQL JDBC driver
+        UUID bookingUuid = UUID.randomUUID();
+        String bookingId = "BK-" + bookingUuid.toString().substring(0, 8).toUpperCase();
 
         // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
         // An attacker can pass guestName = "'; DROP TABLE bookings; --" to destroy data.
         // Use parameterised queries (JdbcTemplate with '?') to prevent SQL injection.
-        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES ('" // sql-inject-001
-                + bookingId + "', '" + guestName + "', '" + roomType               // sql-inject-001
-                + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
-        jdbcTemplate.execute(sql);
+        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)";
+        jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut);
 
         // VIOLATION [Security Health / High]: MD5 replaced with SHA-256.
         String confirmCode = sha256Hash(bookingId + guestName); // sec-weak-hash-001
@@ -106,6 +107,7 @@ public class BookingService {
     private String sha256Hash(String input) { // sec-weak-hash-001
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256"); // sec-weak-hash-001
+            // byte[] maps to PostgreSQL BYTEA (use setBytes/getBytes; Types.BINARY, not VARBINARY)
             byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
