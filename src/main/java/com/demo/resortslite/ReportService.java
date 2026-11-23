@@ -1,55 +1,91 @@
 package com.demo.resortslite;
 
+import com.google.cloud.storage.BlobId;
+import com.google.cloud.storage.BlobInfo;
+import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.StorageException;
+import com.google.cloud.storage.StorageOptions;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    // Reports are stored in Google Cloud Storage instead of the local file system.
+    // Bucket and object prefixes are externalised via environment variables / Spring properties.
+    @Value("${app.reports.gcs.bucket:${GCS_REPORT_BUCKET:resorts-reports}}")
+    private String reportBucket;
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    @Value("${app.reports.gcs.prefix:${GCS_REPORT_PREFIX:reports/}}")
+    private String reportPrefix;
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    @Value("${app.reports.gcs.backup-prefix:${GCS_BACKUP_PREFIX:backups/nightly/}}")
+    private String backupPrefix;
+
+    // Server port is externalised: resolved from server.port / PORT (injected by Cloud Run / GKE).
+    @Value("${server.port:${PORT:8080}}")
+    private int serverPort;
+
+    private volatile Storage storage;
+
+    private Storage storage() {
+        Storage s = storage;
+        if (s == null) {
+            synchronized (this) {
+                if (storage == null) {
+                    storage = StorageOptions.getDefaultInstance().getService();
+                }
+                s = storage;
+            }
+        }
+        return s;
+    }
+
+    private static String normalizePrefix(String prefix) {
+        if (prefix == null || prefix.isEmpty()) {
+            return "";
+        }
+        return prefix.endsWith("/") ? prefix : prefix + "/";
+    }
+
+    private String reportBaseLocation() {
+        return "gs://" + reportBucket + "/" + normalizePrefix(reportPrefix);
+    }
+
+    private String backupLocation() {
+        return "gs://" + reportBucket + "/" + normalizePrefix(backupPrefix);
+    }
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String objectName = normalizePrefix(reportPrefix) + fileName;
+        String fullPath = "gs://" + reportBucket + "/" + objectName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
-            if (!reportDir.exists()) {
-                reportDir.mkdirs();
-            }
+            StringBuilder csv = new StringBuilder();
+            csv.append("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
+            csv.append("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
+            csv.append("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
 
-            FileWriter writer = new FileWriter(fullPath);
-            writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
-            writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
-            writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
-            writer.close();
+            BlobInfo blobInfo = BlobInfo.newBuilder(BlobId.of(reportBucket, objectName))
+                    .setContentType("text/csv")
+                    .build();
+            storage().create(blobInfo, csv.toString().getBytes(StandardCharsets.UTF_8));
 
             result.put("status", "generated");
             result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT); // czr-port-001
+            result.put("serverPort", serverPort);
 
-        } catch (IOException e) {
+        } catch (StorageException e) {
             result.put("status", "error");
             result.put("message", e.getMessage());
         }
@@ -58,8 +94,6 @@ public class ReportService {
     }
 
     // VIOLATION [Code Sustainability / Medium]: No JavaDoc or method documentation.
-    // Missing documentation is flagged across all public methods in the codebase.
-    // This increases onboarding time and transformation risk for automated tools.
     public String buildReportDownloadUrl(String reportName) { // doc-missing-001
         // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP URL
         // hardcoded for report download. Cloud security standards enforce HTTPS.
@@ -67,11 +101,14 @@ public class ReportService {
     }
 
     public Map<String, Object> getSystemInfo() { // doc-missing-001
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        // Standardised on UTC (ISO-8601) so output is independent of server-local timezone.
+        String timestamp = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+                .withZone(ZoneOffset.UTC)
+                .format(Instant.now());
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
-        info.put("serverPort", SERVER_PORT);        // czr-port-001
+        info.put("reportPath", reportBaseLocation());
+        info.put("backupPath", backupLocation());
+        info.put("serverPort", serverPort);
         info.put("generatedAt", timestamp);
         return info;
     }
