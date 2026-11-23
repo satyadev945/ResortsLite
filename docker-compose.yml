@@ -14,10 +14,10 @@ services:
       SERVER_PORT: "8080"
       TZ: UTC
       JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Xms256m -Dfile.encoding=UTF-8 -Duser.timezone=UTC"
-      # External SQL Server database (provided separately)
-      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:?Set SPRING_DATASOURCE_URL}
-      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:?Set SPRING_DATASOURCE_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?Set SPRING_DATASOURCE_PASSWORD}
+      # PostgreSQL database
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-resortsdb}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       # External Redis (Spring Session)
       REDIS_HOST: ${REDIS_HOST:-host.docker.internal}
       REDIS_PORT: ${REDIS_PORT:-6379}
@@ -31,6 +31,24 @@ services:
       APP_NOTIFICATION_ENDPOINT: ${APP_NOTIFICATION_ENDPOINT:-http://notify.internal:7070/send}
     volumes:
       - ./config:/app/config:ro
+    networks:
+      - app-network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    container_name: resortslite-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-resortsdb}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - app-network
     restart: unless-stopped

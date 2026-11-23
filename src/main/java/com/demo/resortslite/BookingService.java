@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
+import java.util.UUID; // UUID maps to PostgreSQL UUID type
 
 @Service
 public class BookingService {
@@ -20,7 +20,7 @@ public class BookingService {
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
     private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    private static final String DB_PASS = System.getenv().getOrDefault("DB_PASSWORD", "");             // sec-cred-001
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
@@ -30,7 +30,8 @@ public class BookingService {
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
-        String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        UUID bookingUuid = UUID.randomUUID(); // round-trips as PostgreSQL UUID
+        String bookingId = "BK-" + bookingUuid.toString().substring(0, 8).toUpperCase();
 
         // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
         // An attacker can pass guestName = "'; DROP TABLE bookings; --" to destroy data.
@@ -107,7 +108,7 @@ public class BookingService {
     private String md5Hash(String input) { // sec-weak-hash-001
         try {
             MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
-            byte[] hash = md.digest(input.getBytes());
+            byte[] hash = md.digest(input.getBytes()); // byte[] maps to PostgreSQL BYTEA (Types.BINARY)
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
             return sb.toString();
