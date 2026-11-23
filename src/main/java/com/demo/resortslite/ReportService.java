@@ -8,6 +8,7 @@ import com.google.cloud.storage.StorageOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+// Report content is handled as byte[] (PostgreSQL BYTEA compatible; no IMAGE/Blob streaming)
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;

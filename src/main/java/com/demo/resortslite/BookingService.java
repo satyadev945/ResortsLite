@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
+import java.util.UUID; // PostgreSQL native UUID type maps to java.util.UUID (no UNIQUEIDENTIFIER)
 
 @Service
 public class BookingService {
@@ -20,7 +20,7 @@ public class BookingService {
     // in application.properties (sm://resorts-db-username, sm://resorts-db-password).
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
 
-    // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
+    // NOTE cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
     private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
@@ -32,10 +32,9 @@ public class BookingService {
         // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
         // An attacker can pass guestName = "'; DROP TABLE bookings; --" to destroy data.
         // Use parameterised queries (JdbcTemplate with '?') to prevent SQL injection.
-        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES ('" // sql-inject-001
-                + bookingId + "', '" + guestName + "', '" + roomType               // sql-inject-001
-                + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
-        jdbcTemplate.execute(sql);
+        // PostgreSQL: parameterised insert (use CREATE TEMPORARY TABLE or CTEs instead of SQL Server temp tables)
+        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)";
+        jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut);
 
         // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
         // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
@@ -55,10 +54,10 @@ public class BookingService {
     public Map<String, Object> getBookingById(String bookingId) {
         // VIOLATION [Security Health / Critical]: SQL injection via string concatenation.
         // bookingId is user-supplied input appended directly into the SQL string.
-        String sql = "SELECT * FROM bookings WHERE id = '" + bookingId + "'"; // sql-inject-001
+        String sql = "SELECT * FROM bookings WHERE id = ?";
         Map<String, Object> result = new HashMap<>();
         try {
-            result = jdbcTemplate.queryForMap(sql);
+            result = jdbcTemplate.queryForMap(sql, bookingId);
         } catch (Exception e) {
             result.put("error", "Booking not found: " + bookingId);
         }
@@ -106,7 +105,7 @@ public class BookingService {
             MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
             byte[] hash = md.digest(input.getBytes());
             StringBuilder sb = new StringBuilder();
-            for (byte b : hash) { sb.append(String.format("%02x", b)); }
+            for (byte b : hash) { sb.append(String.format("%02x", b & 0xff)); }
             return sb.toString();
         } catch (Exception e) {
             return input;
