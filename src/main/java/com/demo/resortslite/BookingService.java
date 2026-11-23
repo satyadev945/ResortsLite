@@ -21,7 +21,7 @@ public class BookingService {
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
     private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    private static final String DB_PASS = System.getenv().getOrDefault("DB_PASS", ""); // sec-cred-001
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
@@ -32,15 +32,16 @@ public class BookingService {
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
-        String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        UUID bookingUuid = UUID.randomUUID(); // PostgreSQL UUID round-trips via java.util.UUID
+        String bookingId = "BK-" + bookingUuid.toString().substring(0, 8).toUpperCase();
 
         // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
         // An attacker can pass guestName = "'; DROP TABLE bookings; --" to destroy data.
         // Use parameterised queries (JdbcTemplate with '?') to prevent SQL injection.
-        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES ('" // sql-inject-001
-                + bookingId + "', '" + guestName + "', '" + roomType               // sql-inject-001
-                + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
-        jdbcTemplate.execute(sql);
+        // booking_uuid is a PostgreSQL UUID column; java.util.UUID is bound natively by the PG JDBC driver.
+        String sql = "INSERT INTO bookings (id, booking_uuid, guest, room, checkin, checkout) "
+                + "VALUES (?, ?, ?, ?, ?, ?)";
+        jdbcTemplate.update(sql, bookingId, bookingUuid, guestName, roomType, checkIn, checkOut);
 
         // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
         // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
@@ -48,6 +49,7 @@ public class BookingService {
 
         Map<String, Object> booking = new HashMap<>();
         booking.put("bookingId", bookingId);
+        booking.put("bookingUuid", bookingUuid); // java.util.UUID maps to PostgreSQL UUID (no UNIQUEIDENTIFIER)
         booking.put("guestName", guestName);
         booking.put("roomType", roomType);
         booking.put("checkIn", checkIn);
@@ -109,7 +111,7 @@ public class BookingService {
     private String md5Hash(String input) { // sec-weak-hash-001
         try {
             MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
-            byte[] hash = md.digest(input.getBytes());
+            byte[] hash = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8)); // byte[] maps to PostgreSQL BYTEA
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
             return sb.toString();
