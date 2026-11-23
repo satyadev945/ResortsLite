@@ -16,16 +16,34 @@ public class ReportService {
     // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
     // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
     // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    private static final String REPORT_BASE_PATH = withTrailingSeparator(getEnvOrDefault("REPORT_BASE_PATH", "./reports/")); // czr-java-001
 
     // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
     // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    private static final String BACKUP_PATH = withTrailingSeparator(getEnvOrDefault("BACKUP_PATH", "./backups/")); // czr-java-001
 
     // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
     // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
     // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    private static final int SERVER_PORT = getIntEnvOrDefault("SERVER_PORT", 8080); // czr-port-001 (externalized via ConfigMap env var)
+
+    private static String getEnvOrDefault(String name, String defaultValue) {
+        String value = System.getenv(name);
+        return (value == null || value.trim().isEmpty()) ? defaultValue : value;
+    }
+
+    private static int getIntEnvOrDefault(String name, int defaultValue) {
+        String value = System.getenv(name);
+        try {
+            return (value == null || value.trim().isEmpty()) ? defaultValue : Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private static String withTrailingSeparator(String path) {
+        return (path.endsWith("/") || path.endsWith("\\")) ? path : path + "/";
+    }
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";

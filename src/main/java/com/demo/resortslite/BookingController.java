@@ -1,9 +1,14 @@
 package com.demo.resortslite;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpSession;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -14,9 +19,32 @@ public class BookingController {
     @Autowired
     private BookingService bookingService;
 
-    // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
-    // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    // Report base path externalised via REPORT_BASE_PATH (ConfigMap-injected env var)
+    @Value("${app.report.base-path:./reports/}")
+    private String reportBasePath;
+
+    // cz-java-0070: Booking cache externalized from in-process HashMap to Amazon ElastiCache (Redis)
+    // so it is shared across all pods. Connection details come from REDIS_HOST/REDIS_PORT/REDIS_PASSWORD
+    // (ConfigMap/Secret-injected env vars); TTL is configurable via BOOKING_CACHE_TTL_SECONDS.
+    private static final String CACHE_KEY_PREFIX = "resortslite:booking:";
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Value("${app.booking-cache.ttl-seconds:3600}")
+    private long bookingCacheTtlSeconds;
+
+    private void cacheBooking(String bookingId, Map<String, Object> booking) {
+        try {
+            redisTemplate.opsForValue().set(CACHE_KEY_PREFIX + bookingId,
+                    objectMapper.writeValueAsString(booking),
+                    Duration.ofSeconds(bookingCacheTtlSeconds));
+        } catch (Exception e) {
+            // Cache is best-effort; booking is already persisted in the database.
+        }
+    }
 
     @PostMapping("/create")
     public Map<String, Object> createBooking(
@@ -28,13 +56,12 @@ public class BookingController {
 
         Map<String, Object> booking = bookingService.createBooking(guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Booking state stored in
-        // HTTP session memory. AWS ALB distributes requests across EC2 instances — session
-        // data on instance A is invisible to instance B. Auto-scaling and failover breaks.
-        session.setAttribute("lastBooking", booking); // cr-java-0065
-        session.setAttribute("guestName", guestName); // cr-java-0065
+        // cz-java-0063: HttpSession is backed by Spring Session + ElastiCache (Redis), so session
+        // state is shared across all pods. Attributes must be Serializable.
+        session.setAttribute("lastBooking", new HashMap<>(booking));
+        session.setAttribute("guestName", guestName);
 
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        cacheBooking((String) booking.get("bookingId"), booking);
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -47,9 +74,8 @@ public class BookingController {
             @PathVariable String bookingId,
             HttpSession session) {
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Reading business state
-        // from HTTP session — will return null on any other instance in the cluster.
-        String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065
+        // cz-java-0063: session is externalized to Redis via Spring Session.
+        String lastGuest = (String) session.getAttribute("guestName");
 
         Map<String, Object> result = new HashMap<>();
         result.put("bookingId", bookingId);
@@ -77,7 +103,7 @@ public class BookingController {
         // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute
         // file path. This path does not exist inside a container image. Container images
         // have their own isolated file systems — /var/legacy/reports won't be present.
-        String reportPath = "/var/legacy/reports/" + month + "_bookings.pdf"; // czr-java-001
+        String reportPath = reportBasePath + month + "_bookings.pdf"; // czr-java-001
 
         Map<String, Object> response = new HashMap<>();
         response.put("reportPath", reportPath);
