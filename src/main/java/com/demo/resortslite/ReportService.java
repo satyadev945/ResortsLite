@@ -1,5 +1,6 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -16,20 +17,22 @@ public class ReportService {
     // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
     // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
     // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    @Value("${REPORT_BASE_PATH:reports/}")
+    private String REPORT_BASE_PATH; // cz-java-0057 (env/ConfigMap injected)
 
     // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
     // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    @Value("${BACKUP_PATH:backups/}")
+    private String BACKUP_PATH; // cz-java-0057 (env/ConfigMap injected)
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    // cz-java-0061: Server port externalized via SERVER_PORT env var (Kubernetes ConfigMap).
+    // Container orchestration dynamically assigns ports; default 8080 only as a fallback.
+    @Value("${SERVER_PORT:8080}")
+    private int SERVER_PORT; // cz-java-0061 (env/ConfigMap injected)
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String fullPath = new File(REPORT_BASE_PATH, fileName).getPath(); // cz-java-0057
 
         Map<String, Object> result = new HashMap<>();
 
