@@ -1,0 +1,49 @@
+version: "3.8"
+
+services:
+  resortslite:
+    image: resortslite:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resortslite
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: "8080"
+      TZ: UTC
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Xms256m -Xmx512m"
+      # External Oracle database (provided separately)
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:oracle:thin:@db-host:1521:ORCL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-admin}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-}
+      # External Redis / ElastiCache (provided separately)
+      REDIS_HOST: ${REDIS_HOST:-localhost}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SSL_ENABLED: ${REDIS_SSL_ENABLED:-false}
+      SESSION_TIMEOUT: ${SESSION_TIMEOUT:-30m}
+      BOOKING_CACHE_TTL_SECONDS: ${BOOKING_CACHE_TTL_SECONDS:-3600}
+      # External services
+      PAYMENT_API_URL: ${PAYMENT_API_URL:-http://payment-svc:9090/payments/charge}
+      APP_PAYMENT_ENDPOINT: ${APP_PAYMENT_ENDPOINT:-http://payment-svc:9090/charge}
+      APP_INVENTORY_ENDPOINT: ${APP_INVENTORY_ENDPOINT:-http://inventory-svc:8081/rooms}
+      APP_NOTIFICATION_ENDPOINT: ${APP_NOTIFICATION_ENDPOINT:-http://notify:7070/send}
+      REPORT_BASE_PATH: /app/reports/
+      BACKUP_PATH: /app/backups/
+    volumes:
+      - ./config:/app/config
+      - resortslite-reports:/app/reports
+      - resortslite-backups:/app/backups
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  resortslite-reports:
+  resortslite-backups:
