@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
+import java.util.UUID; // java.util.UUID maps to PostgreSQL UUID (not UNIQUEIDENTIFIER)
 
 @Service
 public class BookingService {
@@ -20,6 +20,7 @@ public class BookingService {
     // spring.datasource.username / spring.datasource.password using sm:// references).
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
 
+    // No SQL Server #temp tables are used; PostgreSQL would use CREATE TEMPORARY TABLE or CTEs.
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
@@ -104,6 +105,7 @@ public class BookingService {
     private String md5Hash(String input) { // sec-weak-hash-001
         try {
             MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
+            // byte[] values map to PostgreSQL BYTEA (getBytes()/setBytes()); no VARBINARY used
             byte[] hash = md.digest(input.getBytes());
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }

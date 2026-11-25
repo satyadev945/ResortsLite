@@ -15,6 +15,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
+// Reports are stored as GCS blobs (byte[] via getBytes()); no SQL IMAGE/Blob columns are used.
+// Any binary DB column maps to PostgreSQL BYTEA via getBytes()/setBytes().
 @Service
 public class ReportService {
 
