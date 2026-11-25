@@ -18,6 +18,9 @@ import java.util.Map;
 @Service
 public class ReportService {
 
+    // Binary report content is handled as byte[] (getBytes()/setBytes()), which maps to
+    // PostgreSQL BYTEA; no SQL Server IMAGE / LOB streaming API is used.
+
     // Reports are stored in Azure Blob Storage instead of a local file system path.
     // Blob prefix (virtual directory) for generated reports.
     @Value("${azure.storage.report-prefix:reports/}")

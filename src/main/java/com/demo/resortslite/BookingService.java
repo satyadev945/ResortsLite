@@ -20,6 +20,9 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // PostgreSQL notes: no SQL Server "#temp" tables are used (use CREATE TEMPORARY TABLE or CTEs);
+    // UUID values use java.util.UUID against PostgreSQL UUID columns; binary data uses
+    // byte[] against BYTEA (Types.BINARY, never Types.VARBINARY).
     // Database credentials are no longer embedded in source code. They are retrieved from
     // Azure Key Vault using DefaultAzureCredential (managed identity / workload identity).
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
@@ -69,15 +72,18 @@ public class BookingService {
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
-        String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        // PostgreSQL UUID: use java.util.UUID as the Java type (maps to UUID, not UNIQUEIDENTIFIER);
+        // the PostgreSQL JDBC driver round-trips it via setObject/getObject(..., UUID.class).
+        UUID bookingUuid = UUID.randomUUID();
+        String bookingId = "BK-" + bookingUuid.toString().substring(0, 8).toUpperCase();
 
         // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
         // An attacker can pass guestName = "'; DROP TABLE bookings; --" to destroy data.
         // Use parameterised queries (JdbcTemplate with '?') to prevent SQL injection.
-        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES ('" // sql-inject-001
-                + bookingId + "', '" + guestName + "', '" + roomType               // sql-inject-001
-                + "', '" + checkIn + "', '" + checkOut + "')";                     // sql-inject-001
-        jdbcTemplate.execute(sql);
+        // PostgreSQL: bind values as parameters (UUID-typed columns would be bound via java.util.UUID
+        // with setObject; here the id is a text key, so it is bound as a String).
+        String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)";
+        jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut);
 
         // VIOLATION [Security Health / High]: MD5 is a broken hash algorithm (RFC 6151).
         // Do not use MD5 for any security-related hashing. Use SHA-256 or bcrypt.
@@ -85,6 +91,7 @@ public class BookingService {
 
         Map<String, Object> booking = new HashMap<>();
         booking.put("bookingId", bookingId);
+        booking.put("bookingUuid", bookingUuid);
         booking.put("guestName", guestName);
         booking.put("roomType", roomType);
         booking.put("checkIn", checkIn);
