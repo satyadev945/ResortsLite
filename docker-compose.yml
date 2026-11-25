@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  resortslite:
+    image: resortslite:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resortslite
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: "UTC"
+      SPRING_PROFILES_ACTIVE: "docker"
+      SERVER_PORT: "8080"
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Xms256m"
+      # External SQL Server (provided separately)
+      SPRING_DATASOURCE_URL: "${SPRING_DATASOURCE_URL:-jdbc:sqlserver://db-host:1433;databaseName=ResortsDB;encrypt=false;trustServerCertificate=true}"
+      SPRING_DATASOURCE_USERNAME: "${SPRING_DATASOURCE_USERNAME:-admin}"
+      SPRING_DATASOURCE_PASSWORD: "${SPRING_DATASOURCE_PASSWORD:-changeme}"
+      # External Redis / ElastiCache for Spring Session (provided separately)
+      REDIS_HOST: "${REDIS_HOST:-host.docker.internal}"
+      REDIS_PORT: "${REDIS_PORT:-6379}"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+      REDIS_SSL_ENABLED: "${REDIS_SSL_ENABLED:-false}"
+      SESSION_REDIS_NAMESPACE: "resortslite:session"
+      SESSION_TIMEOUT: "30m"
+      # External services
+      PAYMENT_API_URL: "${PAYMENT_API_URL:-http://payment-svc:9090/payments/charge}"
+      REPORT_BASE_PATH: "/app/data/reports"
+      BACKUP_PATH: "/app/data/backups"
+    volumes:
+      - ./data/reports:/app/data/reports
+      - ./data/backups:/app/data/backups
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
