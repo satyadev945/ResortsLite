@@ -1,55 +1,94 @@
 package com.demo.resortslite;
 
+import com.azure.storage.blob.BlobClient;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.BlobServiceClientBuilder;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    // Reports are stored in Azure Blob Storage instead of a local file system path.
+    // Blob prefix (virtual directory) for generated reports.
+    @Value("${azure.storage.report-prefix:reports/}")
+    private String reportPrefix;
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    // Blob prefix (virtual directory) for nightly backups.
+    @Value("${azure.storage.backup-prefix:backups/nightly/}")
+    private String backupPrefix;
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    // Azure Blob Storage container name, externalised via environment variable.
+    @Value("${azure.storage.container-name:resort-reports}")
+    private String containerName;
+
+    // Azure Blob Storage connection string, externalised (env AZURE_STORAGE_CONNECTION_STRING / Key Vault).
+    @Value("${azure.storage.connection-string:}")
+    private String connectionString;
+
+    // Azure Blob Storage account endpoint (used with managed identity when no connection string is set).
+    @Value("${azure.storage.endpoint:}")
+    private String endpoint;
+
+    // Server port is externalised (env SERVER_PORT / Azure App Configuration key server.port)
+    // so Azure platforms can assign it dynamically.
+    @Value("${server.port:8080}")
+    private int serverPort;
+
+    private volatile BlobContainerClient containerClient;
+
+    private BlobContainerClient getContainerClient() {
+        if (containerClient == null) {
+            synchronized (this) {
+                if (containerClient == null) {
+                    BlobServiceClientBuilder builder = new BlobServiceClientBuilder();
+                    if (connectionString != null && !connectionString.isEmpty()) {
+                        builder.connectionString(connectionString);
+                    } else {
+                        builder.endpoint(endpoint)
+                                .credential(new com.azure.identity.DefaultAzureCredentialBuilder().build());
+                    }
+                    BlobContainerClient client = builder.buildClient().getBlobContainerClient(containerName);
+                    if (!client.exists()) {
+                        client.create();
+                    }
+                    containerClient = client;
+                }
+            }
+        }
+        return containerClient;
+    }
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String blobName = reportPrefix + fileName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
-            if (!reportDir.exists()) {
-                reportDir.mkdirs();
-            }
+            StringBuilder csv = new StringBuilder();
+            csv.append("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
+            csv.append("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
+            csv.append("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
+            byte[] data = csv.toString().getBytes(StandardCharsets.UTF_8);
 
-            FileWriter writer = new FileWriter(fullPath);
-            writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
-            writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
-            writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
-            writer.close();
+            BlobClient blobClient = getContainerClient().getBlobClient(blobName);
+            blobClient.upload(new ByteArrayInputStream(data), data.length, true);
 
             result.put("status", "generated");
-            result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT); // czr-port-001
+            result.put("path", blobClient.getBlobUrl());
+            result.put("serverPort", serverPort);
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             result.put("status", "error");
             result.put("message", e.getMessage());
         }
@@ -58,8 +97,6 @@ public class ReportService {
     }
 
     // VIOLATION [Code Sustainability / Medium]: No JavaDoc or method documentation.
-    // Missing documentation is flagged across all public methods in the codebase.
-    // This increases onboarding time and transformation risk for automated tools.
     public String buildReportDownloadUrl(String reportName) { // doc-missing-001
         // VIOLATION cr-java-0088 [Cloud Compatibility / Mandatory]: Plain HTTP URL
         // hardcoded for report download. Cloud security standards enforce HTTPS.
@@ -67,11 +104,13 @@ public class ReportService {
     }
 
     public Map<String, Object> getSystemInfo() { // doc-missing-001
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        // Timezone-agnostic: always UTC, independent of server-local timezone (multi-region safe).
+        String timestamp = ZonedDateTime.now(Clock.systemUTC().withZone(ZoneOffset.UTC))
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss'Z'"));
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
-        info.put("serverPort", SERVER_PORT);        // czr-port-001
+        info.put("reportPath", containerName + "/" + reportPrefix);  // Azure Blob location
+        info.put("backupPath", containerName + "/" + backupPrefix);  // Azure Blob location
+        info.put("serverPort", serverPort);
         info.put("generatedAt", timestamp);
         return info;
     }

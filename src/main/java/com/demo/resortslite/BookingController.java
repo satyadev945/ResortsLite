@@ -1,10 +1,16 @@
 package com.demo.resortslite;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpSession;
 import java.util.HashMap;
+import java.time.Duration;
 import java.util.Map;
 
 @RestController
@@ -14,9 +20,18 @@ public class BookingController {
     @Autowired
     private BookingService bookingService;
 
-    // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
-    // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    private static final Logger log = LoggerFactory.getLogger(BookingController.class);
+    private static final String CACHE_KEY_PREFIX = "resortslite:booking:";
+
+    // cr-java-0067 fixed: booking cache is stored in Azure Cache for Redis with a TTL, so it is
+    // shared across instances and bounded in memory (no instance-local unbounded static map).
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Value("${app.cache.booking-ttl:PT30M}")
+    private Duration bookingCacheTtl;
 
     @PostMapping("/create")
     public Map<String, Object> createBooking(
@@ -28,13 +43,12 @@ public class BookingController {
 
         Map<String, Object> booking = bookingService.createBooking(guestName, roomType, checkIn, checkOut);
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Booking state stored in
-        // HTTP session memory. AWS ALB distributes requests across EC2 instances — session
-        // data on instance A is invisible to instance B. Auto-scaling and failover breaks.
-        session.setAttribute("lastBooking", booking); // cr-java-0065
-        session.setAttribute("guestName", guestName); // cr-java-0065
+        // cr-java-0065 fixed: HttpSession is backed by Azure Cache for Redis (Spring Session),
+        // so session data is shared across all instances and survives instance restarts.
+        session.setAttribute("lastBooking", booking);
+        session.setAttribute("guestName", guestName);
 
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        cacheBooking((String) booking.get("bookingId"), booking);
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -47,9 +61,8 @@ public class BookingController {
             @PathVariable String bookingId,
             HttpSession session) {
 
-        // VIOLATION cr-java-0065 [Cloud Compatibility / Mandatory]: Reading business state
-        // from HTTP session — will return null on any other instance in the cluster.
-        String lastGuest = (String) session.getAttribute("guestName"); // cr-java-0065
+        // cr-java-0065 fixed: session is externalized to Azure Cache for Redis (Spring Session).
+        String lastGuest = (String) session.getAttribute("guestName");
 
         Map<String, Object> result = new HashMap<>();
         result.put("bookingId", bookingId);
@@ -83,5 +96,18 @@ public class BookingController {
         response.put("reportPath", reportPath);
         response.put("message", bookingService.generateReport(month));
         return response;
+    }
+
+    private void cacheBooking(String bookingId, Map<String, Object> booking) {
+        if (bookingId == null) {
+            return;
+        }
+        try {
+            redisTemplate.opsForValue().set(CACHE_KEY_PREFIX + bookingId,
+                    objectMapper.writeValueAsString(booking), bookingCacheTtl);
+        } catch (Exception e) {
+            // Cache is best-effort; a Redis/serialization failure must not fail the booking
+            log.warn("Unable to cache booking {} in Azure Cache for Redis: {}", bookingId, e.getMessage());
+        }
     }
 }
