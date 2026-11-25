@@ -21,7 +21,7 @@ public class BookingService {
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.
     private static final String DB_HOST = "db-prod.resorts-internal.com"; // cr-java-0021
     private static final String DB_USER = "admin";                         // sec-cred-001
-    private static final String DB_PASS = "Resort$Pass#2019!";             // sec-cred-001
+    private static final String DB_PASS = System.getenv().getOrDefault("DB_PASS", "");             // sec-cred-001
 
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
@@ -30,7 +30,9 @@ public class BookingService {
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
-        String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        // PostgreSQL UUID type: java.util.UUID round-trips natively via setObject/getObject
+        UUID bookingUuid = UUID.randomUUID();
+        String bookingId = "BK-" + bookingUuid.toString().substring(0, 8).toUpperCase();
 
         // VIOLATION [Security Health / Critical]: SQL query built by string concatenation.
         // An attacker can pass guestName = "'; DROP TABLE bookings; --" to destroy data.
@@ -100,6 +102,18 @@ public class BookingService {
         return true;
     }
 
+    // PostgreSQL UUID column (replaces SQL Server UNIQUEIDENTIFIER); java.util.UUID bound via setObject
+    public Map<String, Object> getBookingByUuid(UUID bookingUuid) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            result = jdbcTemplate.queryForMap(
+                    "SELECT * FROM bookings WHERE booking_uuid = ?", bookingUuid);
+        } catch (Exception e) {
+            result.put("error", "Booking not found: " + bookingUuid);
+        }
+        return result;
+    }
+
     public String generateReport(String month) {
         return "Report generation triggered for: " + month + " via " + PAYMENT_API;
     }
@@ -107,6 +121,7 @@ public class BookingService {
     private String sha256Hash(String input) { 
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
+            // byte[] maps to PostgreSQL BYTEA (setBytes/getBytes); use Types.BINARY if declared in JDBC
             byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
