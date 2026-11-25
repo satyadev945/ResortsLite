@@ -1,55 +1,84 @@
 package com.demo.resortslite;
 
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
 @Service
 public class ReportService {
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute path.
-    // /var/legacy/reports does not exist in a Docker container image. Breaks containerisation.
-    // Must use volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/"; // czr-java-001
+    // Reports and backups are stored in Amazon S3 instead of local/absolute file system paths.
+    // Configure through environment variables (no host-specific directories required).
+    private static final String REPORT_BUCKET =
+            getEnv("REPORT_S3_BUCKET", "resorts-reports");
+    private static final String REPORT_BASE_PATH =
+            normalisePrefix(getEnv("REPORT_S3_PREFIX", "reports/"));
+    private static final String BACKUP_PATH =
+            normalisePrefix(getEnv("REPORT_S3_BACKUP_PREFIX", "backups/nightly/"));
 
-    // VIOLATION czr-java-001 [Software Portability / Mandatory]: Windows-style absolute path
-    // will fail on any Linux-based container or cloud host. Hard dependency on OS path structure.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\"; // czr-java-001
+    // Server port is externalised: injected at runtime via the SERVER_PORT environment variable
+    // (sourced from AWS Systems Manager Parameter Store through ECS/EKS/Elastic Beanstalk
+    // configuration). No hard-coded port number in application logic.
+    private static final int SERVER_PORT = resolvePort("SERVER_PORT");
 
-    // VIOLATION [Software Portability / High]: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports. Hardcoded ports prevent
-    // dynamic port binding required for modern container deployment and service discovery.
-    private static final int SERVER_PORT = 8080; // czr-port-001
+    private volatile S3Client s3Client;
+
+    private S3Client s3() {
+        if (s3Client == null) {
+            synchronized (this) {
+                if (s3Client == null) {
+                    S3ClientBuilder builder = S3Client.builder();
+                    String region = System.getenv("AWS_REGION");
+                    if (region != null && !region.trim().isEmpty()) {
+                        builder.region(Region.of(region.trim()));
+                    }
+                    s3Client = builder.build();
+                }
+            }
+        }
+        return s3Client;
+    }
 
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName; // czr-java-001
+        String objectKey = REPORT_BASE_PATH + fileName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH); // czr-java-001
-            if (!reportDir.exists()) {
-                reportDir.mkdirs();
-            }
+            String csv = "BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n"
+                    + "BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n"
+                    + "BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n";
 
-            FileWriter writer = new FileWriter(fullPath);
-            writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
-            writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
-            writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
-            writer.close();
+            s3().putObject(
+                    PutObjectRequest.builder()
+                            .bucket(REPORT_BUCKET)
+                            .key(objectKey)
+                            .contentType("text/csv")
+                            .build(),
+                    RequestBody.fromString(csv, StandardCharsets.UTF_8));
 
             result.put("status", "generated");
-            result.put("path", fullPath);
+            result.put("path", "s3://" + REPORT_BUCKET + "/" + objectKey);
             result.put("serverPort", SERVER_PORT); // czr-port-001
 
-        } catch (IOException e) {
+        } catch (S3Exception e) {
+            result.put("status", "error");
+            result.put("message", e.awsErrorDetails() != null
+                    ? e.awsErrorDetails().errorMessage() : e.getMessage());
+        } catch (RuntimeException e) {
             result.put("status", "error");
             result.put("message", e.getMessage());
         }
@@ -67,12 +96,45 @@ public class ReportService {
     }
 
     public Map<String, Object> getSystemInfo() { // doc-missing-001
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        // Standardised on UTC (java.time) so output is independent of server-local timezone.
+        String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                .format(ZonedDateTime.now(Clock.systemUTC()).withZoneSameInstant(ZoneOffset.UTC));
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);  // czr-java-001
-        info.put("backupPath", BACKUP_PATH);        // czr-java-001
+        info.put("reportPath", "s3://" + REPORT_BUCKET + "/" + REPORT_BASE_PATH);
+        info.put("backupPath", "s3://" + REPORT_BUCKET + "/" + BACKUP_PATH);
         info.put("serverPort", SERVER_PORT);        // czr-port-001
         info.put("generatedAt", timestamp);
         return info;
+    }
+
+    private static String getEnv(String name, String defaultValue) {
+        String value = System.getenv(name);
+        return (value == null || value.trim().isEmpty()) ? defaultValue : value.trim();
+    }
+
+    private static int resolvePort(String envName) {
+        String value = System.getenv(envName);
+        if (value == null || value.trim().isEmpty()) {
+            value = System.getenv("PORT");
+        }
+        if (value != null && !value.trim().isEmpty()) {
+            try {
+                return Integer.parseInt(value.trim());
+            } catch (NumberFormatException ignored) {
+                // fall through to 0 (dynamic / unassigned)
+            }
+        }
+        return 0;
+    }
+
+    private static String normalisePrefix(String prefix) {
+        String p = prefix;
+        while (p.startsWith("/")) {
+            p = p.substring(1);
+        }
+        if (!p.isEmpty() && !p.endsWith("/")) {
+            p = p + "/";
+        }
+        return p;
     }
 }
