@@ -16,6 +16,29 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // PostgreSQL UUID (was UNIQUEIDENTIFIER); BYTEA (was VARBINARY). Temp tables: use CREATE TEMPORARY TABLE or CTEs, not #tmp
+    private static final String UUID_COLUMN_TYPE = "UUID";
+    private static final String BINARY_COLUMN_TYPE = "BYTEA";
+
+    /** Reads a PostgreSQL UUID column as java.util.UUID (pgjdbc supports getObject(.., UUID.class)). */
+    public UUID findGuestUuid(String bookingId) {
+        return jdbcTemplate.query(
+                "SELECT guest_uuid FROM bookings WHERE id = ?",
+                ps -> ps.setString(1, bookingId),
+                rs -> rs.next() ? rs.getObject(1, UUID.class) : null);
+    }
+
+    /** Binds a java.util.UUID natively to a PostgreSQL UUID parameter (no string/UNIQUEIDENTIFIER conversion). */
+    public int updateGuestUuid(String bookingId, UUID guestUuid) {
+        return jdbcTemplate.update(
+                "UPDATE bookings SET guest_uuid = ? WHERE id = ?",
+                ps -> {
+                    // pgjdbc maps java.util.UUID natively to PostgreSQL UUID
+                    ps.setObject(1, guestUuid);
+                    ps.setString(2, bookingId);
+                });
+    }
+
     // VIOLATION [Security Health / Critical]: Hardcoded database credentials in source code.
     // If this repo is pushed to GitHub (even private), credentials are permanently exposed
     // in git history. AWS Secrets Manager or Parameter Store must be used instead.

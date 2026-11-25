@@ -14,8 +14,8 @@ services:
       SPRING_PROFILES_ACTIVE: "docker"
       SERVER_PORT: "8080"
       JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Xms256m"
-      # External SQL Server (provided separately)
-      SPRING_DATASOURCE_URL: "${SPRING_DATASOURCE_URL:-jdbc:sqlserver://db-host:1433;databaseName=ResortsDB;encrypt=false;trustServerCertificate=true}"
+      # External PostgreSQL (provided separately)
+      SPRING_DATASOURCE_URL: "${SPRING_DATASOURCE_URL:-jdbc:postgresql://db-host:5432/ResortsDB}"
       SPRING_DATASOURCE_USERNAME: "${SPRING_DATASOURCE_USERNAME:-admin}"
       SPRING_DATASOURCE_PASSWORD: "${SPRING_DATASOURCE_PASSWORD:-changeme}"
       # External Redis / ElastiCache for Spring Session (provided separately)
