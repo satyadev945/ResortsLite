@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
+// PostgreSQL: binary/LOB data uses BYTEA via getBytes()/setBytes(); no SQL Server IMAGE columns are referenced.
 @Service
 public class ReportService {
 

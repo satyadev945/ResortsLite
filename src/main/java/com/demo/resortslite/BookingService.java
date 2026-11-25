@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
+import java.util.UUID; // PostgreSQL UUID type maps to java.util.UUID (replaces UNIQUEIDENTIFIER)
 
 @Service
 public class BookingService {
@@ -15,6 +15,7 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // PostgreSQL: no SQL Server #temp tables are used; use CREATE TEMPORARY TABLE or CTEs (WITH ...) if needed.
     // cr-java-0069: Database credentials are no longer embedded in source code. The DB user and
     // password are retrieved from AWS Secrets Manager (see DataSourceConfig / DatabaseSecretsProvider)
     // and injected into the connection pool at runtime.
@@ -23,7 +24,8 @@ public class BookingService {
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+    // PostgreSQL: any UUID columns use the native UUID type (java.util.UUID), not UNIQUEIDENTIFIER.
+    private static final String PAYMENT_API ="http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
@@ -104,6 +106,7 @@ public class BookingService {
     private String md5Hash(String input) { // sec-weak-hash-001
         try {
             MessageDigest md = MessageDigest.getInstance("MD5"); // sec-weak-hash-001
+            // byte[] maps to PostgreSQL BYTEA (not VARBINARY) when persisted via getBytes()/setBytes()
             byte[] hash = md.digest(input.getBytes());
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) { sb.append(String.format("%02x", b)); }
