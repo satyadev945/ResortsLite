@@ -25,7 +25,8 @@ public class BookingService {
     // VIOLATION cr-java-0021 [Cloud Compatibility / Mandatory]: Hardcoded infrastructure
     // hostname. Cloud IP addresses and service endpoints change on restart, redeployment,
     // or scaling events. Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge"; // cr-java-0021, cr-java-0088
+    private static final String PAYMENT_API = System.getenv().getOrDefault(
+            "PAYMENT_API_URL", "http://payment-svc.internal:9090/payments/charge"); // cr-java-0021, cr-java-0088
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {

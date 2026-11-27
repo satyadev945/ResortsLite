@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resortlite-mono1
+  namespace: resortlite-mono1
+  labels:
+    app: resortlite-mono1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: resortlite-mono1
+  template:
+    metadata:
+      labels:
+        app: resortlite-mono1
+    spec:
+      containers:
+        - name: resortlite-mono1
+          image: "{{IMAGE_URI}}"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: APP_PORT
+              value: "{{APP_PORT}}"
+            - name: SPRING_PROFILES_ACTIVE
+              value: "{{SPRING_PROFILES_ACTIVE}}"
+            - name: REDIS_HOST
+              value: "{{REDIS_HOST}}"
+            - name: REDIS_PORT
+              value: "{{REDIS_PORT}}"
+            - name: REDIS_SSL
+              value: "{{REDIS_SSL}}"
+            - name: PAYMENT_API_URL
+              value: "{{PAYMENT_API_URL}}"
+            - name: REPORT_PATH
+              value: "{{REPORT_PATH}}"
+            - name: BACKUP_PATH
+              value: "{{BACKUP_PATH}}"
+            - name: CACHE_TTL
+              value: "{{CACHE_TTL}}"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: resortlite-mono1-secrets
+                  key: REDIS_PASSWORD
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: reports
+              mountPath: /app/reports
+            - name: backups
+              mountPath: /app/backups
+      volumes:
+        - name: reports
+          emptyDir: {}
+        - name: backups
+          emptyDir: {}

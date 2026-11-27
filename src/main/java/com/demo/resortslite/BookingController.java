@@ -1,9 +1,11 @@
 package com.demo.resortslite;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpSession;
+import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -16,7 +18,11 @@ public class BookingController {
 
     // VIOLATION cr-java-0067 [Cloud Compatibility / Mandatory]: In-memory cache without TTL
     // breaks horizontal scaling — cache is instance-local, invisible to other EC2 instances
-    private static final Map<String, Object> bookingCache = new HashMap<>(); // cr-java-0067
+    // Cache shared across instances: stored in Redis through Spring Cache (see SessionConfig)
+    private static final String BOOKING_CACHE = "bookingCache"; // cr-java-0067
+
+    @Autowired
+    private CacheManager cacheManager;
 
     @PostMapping("/create")
     public Map<String, Object> createBooking(
@@ -34,7 +40,7 @@ public class BookingController {
         session.setAttribute("lastBooking", booking); // cr-java-0065
         session.setAttribute("guestName", guestName); // cr-java-0065
 
-        bookingCache.put((String) booking.get("bookingId"), booking);
+        cacheManager.getCache(BOOKING_CACHE).put((String) booking.get("bookingId"), booking);
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "confirmed");
@@ -77,7 +83,9 @@ public class BookingController {
         // VIOLATION czr-java-001 [Software Portability / Mandatory]: Hardcoded absolute
         // file path. This path does not exist inside a container image. Container images
         // have their own isolated file systems — /var/legacy/reports won't be present.
-        String reportPath = "/var/legacy/reports/" + month + "_bookings.pdf"; // czr-java-001
+        String reportPath = new File(
+                System.getenv().getOrDefault("REPORT_PATH", "/app/reports"),
+                month + "_bookings.pdf").getPath(); // czr-java-001
 
         Map<String, Object> response = new HashMap<>();
         response.put("reportPath", reportPath);
